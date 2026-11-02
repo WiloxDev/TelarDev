@@ -762,10 +762,52 @@ impl ClientShellState {
                     return None;
                 }
 
+                if self.right_dock_state.files_tab.is_searching {
+                    match key.code {
+                        KeyCode::Esc => {
+                            self.right_dock_state.files_tab.cancel_search();
+                            outcome.repaint = true;
+                        }
+                        KeyCode::Enter => {
+                            self.right_dock_state.files_tab.finish_search();
+                            outcome.repaint = true;
+                        }
+                        KeyCode::Backspace => {
+                            self.right_dock_state.files_tab.search_backspace();
+                            outcome.repaint = true;
+                        }
+                        KeyCode::Down => {
+                            self.right_dock_state.files_tab.select_next();
+                            outcome.repaint = true;
+                        }
+                        KeyCode::Up => {
+                            self.right_dock_state.files_tab.select_prev();
+                            outcome.repaint = true;
+                        }
+                        KeyCode::Char(c) => {
+                            self.right_dock_state.files_tab.search_push(c);
+                            outcome.repaint = true;
+                        }
+                        _ => {}
+                    }
+                    return None;
+                }
+
                 match key.code {
                     KeyCode::Esc => {
-                        self.mode = ClientShellMode::Terminal;
-                        outcome.repaint = true;
+                        if self.right_dock_state.files_tab.search_query.is_some() {
+                            self.right_dock_state.files_tab.cancel_search();
+                            outcome.repaint = true;
+                        } else {
+                            self.mode = ClientShellMode::Terminal;
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('/') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            self.right_dock_state.files_tab.start_search();
+                            outcome.repaint = true;
+                        }
                     }
                     KeyCode::Tab | KeyCode::Char(']') => {
                         let next = self.right_dock_state.active_tab.next();
@@ -808,6 +850,18 @@ impl ClientShellState {
                     KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Enter => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.activate_file_selection();
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('.') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            self.right_dock_state.files_tab.toggle_hidden();
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('r') | KeyCode::Char('R') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            self.right_dock_state.files_tab.mark_dirty();
                             outcome.repaint = true;
                         }
                     }

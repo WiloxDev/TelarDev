@@ -58,6 +58,7 @@ pub struct WorkspaceContext<'a> {
     pub root_path: &'a Path,
     pub branch: Option<&'a str>,
     pub git_ahead_behind: Option<(usize, usize)>,
+    pub is_preview: bool,
 }
 
 /// Estado del modal flotante Quick Peek (Punto 6)
@@ -141,6 +142,7 @@ fn scan_tree_dir(
     rel_dir: &Path,
     depth: usize,
     expanded: &BTreeSet<PathBuf>,
+    show_hidden: bool,
     entries: &mut Vec<FileTreeEntry>,
 ) {
     if depth > 20 {
@@ -160,6 +162,9 @@ fn scan_tree_dir(
     for entry in dir_entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if name == ".git" {
+            continue;
+        }
+        if !show_hidden && name.starts_with('.') {
             continue;
         }
         let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
@@ -188,13 +193,13 @@ fn scan_tree_dir(
         });
 
         if is_expanded {
-            scan_tree_dir(root, &rel_path, depth + 1, expanded, entries);
+            scan_tree_dir(root, &rel_path, depth + 1, expanded, show_hidden, entries);
         }
     }
 }
 
 /// Pestaña 2: Files (Explorador perezoso con caché bajo demanda y jerarquía)
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FilesTab {
     is_dirty: bool,
     cached_root: Option<PathBuf>,
@@ -203,6 +208,26 @@ pub struct FilesTab {
     pub selected_index: usize,
     pub scroll_offset: usize,
     pub visible_rows: usize,
+    pub show_hidden: bool,
+    pub search_query: Option<String>,
+    pub is_searching: bool,
+}
+
+impl Default for FilesTab {
+    fn default() -> Self {
+        Self {
+            is_dirty: false,
+            cached_root: None,
+            entries: Vec::new(),
+            expanded_dirs: BTreeSet::new(),
+            selected_index: 0,
+            scroll_offset: 0,
+            visible_rows: 0,
+            show_hidden: true,
+            search_query: None,
+            is_searching: false,
+        }
+    }
 }
 
 impl DockTab for FilesTab {
@@ -227,12 +252,23 @@ impl FilesTab {
     pub fn rebuild_tree(&mut self, root: &Path) {
         self.cached_root = Some(root.to_path_buf());
         self.entries.clear();
-        scan_tree_dir(root, Path::new(""), 0, &self.expanded_dirs, &mut self.entries);
+        scan_tree_dir(root, Path::new(""), 0, &self.expanded_dirs, self.show_hidden, &mut self.entries);
         if self.selected_index >= self.entries.len() {
             self.selected_index = self.entries.len().saturating_sub(1);
         }
         self.ensure_selected_visible();
         self.is_dirty = false;
+    }
+
+    pub fn toggle_hidden(&mut self) {
+        self.show_hidden = !self.show_hidden;
+        if let Some(root) = self.cached_root.clone() {
+            self.rebuild_tree(&root);
+        }
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.is_dirty = true;
     }
 
     pub fn refresh_if_needed(&mut self, root: &Path) {
@@ -248,8 +284,76 @@ impl FilesTab {
         self.rebuild_tree(root);
     }
 
+    pub fn start_search(&mut self) {
+        self.is_searching = true;
+        if self.search_query.is_none() {
+            self.search_query = Some(String::new());
+        }
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    pub fn cancel_search(&mut self) {
+        self.is_searching = false;
+        self.search_query = None;
+        self.clamp_selection();
+    }
+
+    pub fn finish_search(&mut self) {
+        self.is_searching = false;
+        self.clamp_selection();
+    }
+
+    pub fn search_push(&mut self, c: char) {
+        let query = self.search_query.get_or_insert_with(String::new);
+        query.push(c);
+        self.selected_index = 0;
+        self.scroll_offset = 0;
+        self.clamp_selection();
+    }
+
+    pub fn search_backspace(&mut self) {
+        if let Some(query) = &mut self.search_query {
+            query.pop();
+            self.selected_index = 0;
+            self.scroll_offset = 0;
+            self.clamp_selection();
+        }
+    }
+
+    pub fn filtered_indices(&self) -> Vec<usize> {
+        if let Some(query) = &self.search_query {
+            let q = query.to_lowercase();
+            if q.is_empty() {
+                (0..self.entries.len()).collect()
+            } else {
+                self.entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| {
+                        e.name.to_lowercase().contains(&q)
+                            || e.relative_path.to_string_lossy().to_lowercase().contains(&q)
+                    })
+                    .map(|(i, _)| i)
+                    .collect()
+            }
+        } else {
+            (0..self.entries.len()).collect()
+        }
+    }
+
+    pub fn clamp_selection(&mut self) {
+        let count = self.filtered_indices().len();
+        if self.selected_index >= count {
+            self.selected_index = count.saturating_sub(1);
+        }
+        self.ensure_selected_visible();
+    }
+
     pub fn selected_entry(&self) -> Option<&FileTreeEntry> {
-        self.entries.get(self.selected_index)
+        let indices = self.filtered_indices();
+        let &real_idx = indices.get(self.selected_index)?;
+        self.entries.get(real_idx)
     }
 
     pub fn set_selected_expanded(&mut self, expanded: bool) {
@@ -294,7 +398,8 @@ impl FilesTab {
     }
 
     pub fn select_next(&mut self) {
-        if !self.entries.is_empty() && self.selected_index + 1 < self.entries.len() {
+        let count = self.filtered_indices().len();
+        if count > 0 && self.selected_index + 1 < count {
             self.selected_index += 1;
             self.ensure_selected_visible();
         }
@@ -373,6 +478,14 @@ impl DockLayoutMode {
     }
 }
 
+/// Estado de pestañas aislado por cada workspace para conservar memoria de navegación
+#[derive(Debug, Default)]
+pub struct WorkspaceDockState {
+    pub status_tab: StatusTab,
+    pub files_tab: FilesTab,
+    pub changes_tab: ChangesTab,
+}
+
 /// Estado global del Right Dock persistido en ClientShellState
 #[derive(Debug, Default)]
 pub struct RightDockState {
@@ -381,6 +494,7 @@ pub struct RightDockState {
     pub status_tab: StatusTab,
     pub files_tab: FilesTab,
     pub changes_tab: ChangesTab,
+    pub workspace_cache: std::collections::HashMap<String, WorkspaceDockState>,
     pub last_workspace_id: Option<String>,
     pub quick_peek: Option<QuickPeekState>,
 }
@@ -404,18 +518,45 @@ impl RightDockState {
         }
     }
 
-    /// Sincronización reactiva ante cambio de workspace (Punto 7)
+    /// Sincronización reactiva ante cambio de workspace con preservación de estado
     pub fn sync_workspace(&mut self, current_workspace_id: &str) {
         if self.last_workspace_id.as_deref() != Some(current_workspace_id) {
+            // 1. Si había un workspace anterior activo, guardar su estado en la caché
+            if let Some(old_id) = self.last_workspace_id.take() {
+                let old_state = WorkspaceDockState {
+                    status_tab: std::mem::take(&mut self.status_tab),
+                    files_tab: std::mem::take(&mut self.files_tab),
+                    changes_tab: std::mem::take(&mut self.changes_tab),
+                };
+                self.workspace_cache.insert(old_id, old_state);
+            }
+
+            // 2. Restaurar estado del nuevo workspace si existía en caché, o inicializar limpio
+            if let Some(mut restored) = self.workspace_cache.remove(current_workspace_id) {
+                // Marcar como dirty para re-validar frescura sin destruir carpetas expandidas ni scroll
+                restored.status_tab.mark_dirty();
+                restored.files_tab.mark_dirty();
+                restored.changes_tab.mark_dirty();
+                self.status_tab = restored.status_tab;
+                self.files_tab = restored.files_tab;
+                self.changes_tab = restored.changes_tab;
+            } else {
+                self.status_tab = StatusTab::default();
+                self.files_tab = FilesTab::default();
+                self.changes_tab = ChangesTab::default();
+                self.status_tab.mark_dirty();
+                self.files_tab.mark_dirty();
+                self.changes_tab.mark_dirty();
+            }
+
             self.last_workspace_id = Some(current_workspace_id.to_string());
-            self.status_tab.mark_dirty();
-            self.files_tab.mark_dirty();
-            self.changes_tab.mark_dirty();
-            self.files_tab.selected_index = 0;
-            self.files_tab.scroll_offset = 0;
-            self.files_tab.expanded_dirs.clear();
             self.quick_peek = None; // Cierra cualquier preview si cambiaste de workspace
         }
+    }
+
+    /// Elimina de la caché los workspaces que ya no existen en el servidor
+    pub fn prune_dead_workspaces(&mut self, active_workspace_ids: &std::collections::HashSet<&str>) {
+        self.workspace_cache.retain(|id, _| active_workspace_ids.contains(id.as_str()));
     }
 
     pub fn activate_file_selection(&mut self) {
@@ -603,9 +744,26 @@ fn render_status_content(
     }
 
     let ws_name = context.map(|c| c.workspace_name).unwrap_or("Local");
-    let branch_name = context.and_then(|c| c.branch).unwrap_or("main");
+    let is_preview = context.map(|c| c.is_preview).unwrap_or(false);
+    let branch_name = if let Some(branch) = context.and_then(|c| c.branch) {
+        branch.to_string()
+    } else if let Some(ctx) = context {
+        if ctx.root_path.join(".git").exists() {
+            "(init)".to_string()
+        } else {
+            "-".to_string()
+        }
+    } else {
+        "-".to_string()
+    };
 
-    buffer.set_string(x + 1, y, "• GENTLE HUD", Style::default().fg(config.palette.accent));
+    let (hud_title, title_color) = if is_preview {
+        ("• GENTLE HUD [Preview]", config.palette.yellow)
+    } else {
+        ("• GENTLE HUD", config.palette.accent)
+    };
+
+    buffer.set_string(x + 1, y, hud_title, Style::default().fg(title_color));
     buffer.set_string(x + 1, y + 1, format!("Workspace: {ws_name}"), Style::default().fg(config.palette.text));
     buffer.set_string(x + 1, y + 2, format!("Branch:    {branch_name}"), Style::default().fg(config.palette.mauve));
 
@@ -632,32 +790,52 @@ fn render_files_content(
     let visible_rows = (rows.saturating_sub(2)) as usize;
     files_tab.set_visible_rows(visible_rows);
 
-    let count_text = if !files_tab.entries.is_empty() {
-        format!("• EXPLORER ({}/{}) [Space=Peek]", files_tab.selected_index + 1, files_tab.entries.len())
+    let count_text = if files_tab.is_searching {
+        let q = files_tab.search_query.as_deref().unwrap_or("");
+        format!("🔍 /{q}_ [Esc:Cancelar]")
+    } else if let Some(q) = &files_tab.search_query {
+        format!("🔍 /{q} [Esc:Limpiar]")
+    } else if !files_tab.entries.is_empty() {
+        let hidden_tag = if files_tab.show_hidden { "[.:All]" } else { "[.:NoDot]" };
+        format!("• EXPLORER ({}/{}) [Space=Peek] {}", files_tab.selected_index + 1, files_tab.entries.len(), hidden_tag)
+    } else if files_tab.cached_root.is_none() {
+        "• EXPLORER [Cargando...]".to_string()
     } else {
         "• EXPLORER [Empty]".to_string()
     };
-    buffer.set_string(x + 1, y, count_text, Style::default().fg(config.palette.accent));
+    let title_style = if files_tab.is_searching {
+        Style::default().fg(config.palette.yellow)
+    } else {
+        Style::default().fg(config.palette.accent)
+    };
+    buffer.set_string(x + 1, y, count_text, title_style);
 
-    if files_tab.entries.is_empty() {
-        buffer.set_string(x + 1, y + 2, "(no files)", Style::default().fg(config.palette.subtext0));
+    let indices = files_tab.filtered_indices();
+    if indices.is_empty() {
+        if files_tab.cached_root.is_none() {
+            buffer.set_string(x + 1, y + 2, "Cargando directorio...", Style::default().fg(config.palette.subtext0));
+        } else if files_tab.search_query.is_some() {
+            buffer.set_string(x + 1, y + 2, "(no matches)", Style::default().fg(config.palette.subtext0));
+        } else {
+            buffer.set_string(x + 1, y + 2, "(no files)", Style::default().fg(config.palette.subtext0));
+        }
         return;
     }
 
-    let start = files_tab.scroll_offset.min(files_tab.entries.len());
-    for (display_idx, (real_idx, entry)) in files_tab
-        .entries
+    let start = files_tab.scroll_offset.min(indices.len());
+    for (display_idx, (real_pos, &real_idx)) in indices
         .iter()
         .enumerate()
         .skip(start)
         .take(visible_rows)
         .enumerate()
     {
+        let entry = &files_tab.entries[real_idx];
         let row_y = y + 2 + (display_idx as u16);
         let row_rect = Rect::new(x, row_y, width, 1);
         hits.right_dock_file_rows.push((row_rect, real_idx));
 
-        let is_selected = real_idx == files_tab.selected_index;
+        let is_selected = real_pos == files_tab.selected_index;
         let indent = "  ".repeat(entry.depth);
         let (chevron, icon) = if entry.is_dir {
             if entry.is_expanded {
@@ -895,6 +1073,133 @@ mod tests {
         assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-beta"));
         assert!(dock.files_tab.is_dirty);
         assert!(dock.status_tab.is_dirty);
+    }
+
+    #[test]
+    fn test_workspace_synchronization_persists_and_restores_state() {
+        let mut dock = RightDockState::default();
+
+        // Inicializamos workspace A
+        dock.sync_workspace("ws-A");
+        dock.files_tab.selected_index = 4;
+        dock.files_tab.scroll_offset = 2;
+        dock.files_tab.expanded_dirs.insert(PathBuf::from("src/client"));
+
+        // Conmutamos a workspace B
+        dock.sync_workspace("ws-B");
+        assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-B"));
+        // El nuevo workspace B debe iniciar limpio
+        assert_eq!(dock.files_tab.selected_index, 0);
+        assert_eq!(dock.files_tab.scroll_offset, 0);
+        assert!(dock.files_tab.expanded_dirs.is_empty());
+
+        // Modificamos estado en workspace B
+        dock.files_tab.selected_index = 1;
+        dock.files_tab.expanded_dirs.insert(PathBuf::from("docs"));
+
+        // Conmutamos de regreso a workspace A
+        dock.sync_workspace("ws-A");
+        assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-A"));
+        // Estado de workspace A debe haber sido restaurado íntegramente
+        assert_eq!(dock.files_tab.selected_index, 4);
+        assert_eq!(dock.files_tab.scroll_offset, 2);
+        assert!(dock.files_tab.expanded_dirs.contains(&PathBuf::from("src/client")));
+        assert!(!dock.files_tab.expanded_dirs.contains(&PathBuf::from("docs")));
+
+        // Conmutamos de nuevo a workspace B
+        dock.sync_workspace("ws-B");
+        assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-B"));
+        assert_eq!(dock.files_tab.selected_index, 1);
+        assert!(dock.files_tab.expanded_dirs.contains(&PathBuf::from("docs")));
+    }
+
+    #[test]
+    fn test_prune_dead_workspaces_evicts_closed_workspaces() {
+        let mut dock = RightDockState::default();
+        dock.sync_workspace("ws-1");
+        dock.sync_workspace("ws-2");
+        dock.sync_workspace("ws-3");
+
+        // En este punto ws-1 y ws-2 deben estar en workspace_cache
+        assert!(dock.workspace_cache.contains_key("ws-1"));
+        assert!(dock.workspace_cache.contains_key("ws-2"));
+
+        // Simulamos que ws-1 fue cerrado en el servidor y solo ws-2 y ws-3 siguen activos
+        let mut active = std::collections::HashSet::new();
+        active.insert("ws-2");
+        active.insert("ws-3");
+        dock.prune_dead_workspaces(&active);
+
+        // ws-1 debe haber sido liberado de la memoria, ws-2 conservado
+        assert!(!dock.workspace_cache.contains_key("ws-1"));
+        assert!(dock.workspace_cache.contains_key("ws-2"));
+    }
+
+    #[test]
+    fn test_toggle_hidden_dotfiles() {
+        let root = TreeFixture::new();
+        std::fs::create_dir(root.0.join(".config")).unwrap();
+        std::fs::write(root.0.join(".bashrc"), "content").unwrap();
+        std::fs::write(root.0.join("visible.txt"), "content").unwrap();
+
+        let mut files = FilesTab::default();
+        assert!(files.show_hidden);
+
+        files.refresh_if_needed(&root.0);
+        assert!(files.entries.iter().any(|e| e.name == ".config"));
+        assert!(files.entries.iter().any(|e| e.name == ".bashrc"));
+        assert!(files.entries.iter().any(|e| e.name == "visible.txt"));
+
+        // Ocultar dotfiles
+        files.toggle_hidden();
+        assert!(!files.show_hidden);
+        assert!(!files.entries.iter().any(|e| e.name == ".config"));
+        assert!(!files.entries.iter().any(|e| e.name == ".bashrc"));
+        assert!(files.entries.iter().any(|e| e.name == "visible.txt"));
+
+        // Volver a mostrar dotfiles
+        files.toggle_hidden();
+        assert!(files.show_hidden);
+        assert!(files.entries.iter().any(|e| e.name == ".config"));
+        assert!(files.entries.iter().any(|e| e.name == ".bashrc"));
+    }
+
+    #[test]
+    fn test_files_search_filter_and_cancellation() {
+        let root = TreeFixture::new();
+        std::fs::write(root.0.join("main.rs"), "fn main() {}").unwrap();
+        std::fs::write(root.0.join("dock.rs"), "// dock").unwrap();
+        std::fs::write(root.0.join("render.rs"), "// render").unwrap();
+
+        let mut files = FilesTab::default();
+        files.refresh_if_needed(&root.0);
+        assert_eq!(files.entries.len(), 3);
+
+        // Iniciar búsqueda
+        files.start_search();
+        assert!(files.is_searching);
+        assert_eq!(files.search_query.as_deref(), Some(""));
+
+        // Escribir "dock"
+        for c in "dock".chars() {
+            files.search_push(c);
+        }
+        assert_eq!(files.search_query.as_deref(), Some("dock"));
+        let filtered = files.filtered_indices();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(files.entries[filtered[0]].name, "dock.rs");
+        assert_eq!(files.selected_entry().unwrap().name, "dock.rs");
+
+        // Borrar última letra con backspace -> "doc"
+        files.search_backspace();
+        assert_eq!(files.search_query.as_deref(), Some("doc"));
+        assert_eq!(files.filtered_indices().len(), 1);
+
+        // Cancelar búsqueda restaura todo
+        files.cancel_search();
+        assert!(!files.is_searching);
+        assert!(files.search_query.is_none());
+        assert_eq!(files.filtered_indices().len(), 3);
     }
 
     #[test]

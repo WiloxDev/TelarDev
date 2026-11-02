@@ -330,15 +330,43 @@ pub(super) fn render_shell(
         );
     }
     if layout.right_dock.width > 0 {
-        let active_ws = snapshot.workspaces.iter().find(|ws| {
-            snapshot.focused_workspace_id.as_deref() == Some(&ws.workspace_id)
+        let active_ws_ids: std::collections::HashSet<&str> = snapshot
+            .workspaces
+            .iter()
+            .map(|ws| ws.workspace_id.as_str())
+            .collect();
+        state.right_dock_state.prune_dead_workspaces(&active_ws_ids);
+
+        let target_ws_id = state
+            .selected_workspace_id
+            .map(|target| target.workspace_id.as_str())
+            .or_else(|| snapshot.focused_workspace_id.as_deref());
+        let is_preview = state
+            .selected_workspace_id
+            .map(|target| target.workspace_id.as_str())
+            .is_some_and(|selected| snapshot.focused_workspace_id.as_deref() != Some(selected));
+
+        let active_ws = target_ws_id.and_then(|id| {
+            snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
         });
-        let ws_context = active_ws.map(|ws| super::dock::WorkspaceContext {
-            workspace_id: &ws.workspace_id,
-            workspace_name: &ws.label,
-            root_path: std::path::Path::new(&ws.new_workspace_cwd),
-            branch: ws.branch.as_deref(),
-            git_ahead_behind: ws.git_ahead_behind,
+        let active_pane_cwd = active_ws.and_then(|ws| {
+            snapshot
+                .panes
+                .iter()
+                .find(|p| p.workspace_id == ws.workspace_id && p.focused)
+                .or_else(|| snapshot.panes.iter().find(|p| p.workspace_id == ws.workspace_id))
+                .and_then(|p| p.foreground_cwd.as_deref().or(p.cwd.as_deref()))
+        });
+        let ws_context = active_ws.map(|ws| {
+            let root_str = active_pane_cwd.unwrap_or(&ws.new_workspace_cwd);
+            super::dock::WorkspaceContext {
+                workspace_id: &ws.workspace_id,
+                workspace_name: &ws.label,
+                root_path: std::path::Path::new(root_str),
+                branch: ws.branch.as_deref(),
+                git_ahead_behind: ws.git_ahead_behind,
+                is_preview,
+            }
         });
 
         super::dock::render_right_dock(
