@@ -144,6 +144,10 @@ pub(super) struct ShellHitMap {
     pub(super) release_notes_scrollbar: Rect,
     pub(super) release_notes_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(super) release_notes_max_scroll: usize,
+    pub(super) right_dock_area: Rect,
+    pub(super) right_dock_tabs: Vec<(Rect, super::dock::DockTabId)>,
+    pub(super) right_dock_split_toggle: Rect,
+    pub(super) right_dock_file_rows: Vec<(Rect, usize)>,
 }
 
 #[derive(Clone)]
@@ -890,6 +894,7 @@ pub(crate) struct ClientShellState {
     pub(super) sidebar_section_split_manual: bool,
     pub(super) agent_panel_sort_manual: bool,
     pub(super) last_sidebar_divider_click: Option<std::time::Instant>,
+    pub(super) last_dock_file_click: Option<(usize, std::time::Instant)>,
     pub(super) chrome_drag: Option<ClientChromeDrag>,
     pub(super) workspace_press: Option<ClientWorkspacePress>,
     pub(super) tab_press: Option<ClientTabPress>,
@@ -1071,6 +1076,7 @@ impl ClientShellState {
             sidebar_section_split_manual: preferences.sidebar_section_split.is_some(),
             agent_panel_sort_manual: preferences.agent_panel_sort.is_some(),
             last_sidebar_divider_click: None,
+            last_dock_file_click: None,
             chrome_drag: None,
             workspace_press: None,
             tab_press: None,

@@ -1929,6 +1929,24 @@ impl ClientShellState {
                     outcome.repaint = true;
                 }
             }
+            MouseEventKind::ScrollUp if super::contains(self.hits.right_dock_area, point) => {
+                if let Some(peek) = &mut self.right_dock_state.quick_peek {
+                    peek.scroll_up();
+                    outcome.repaint = true;
+                } else if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                    self.right_dock_state.files_tab.scroll_up();
+                    outcome.repaint = true;
+                }
+            }
+            MouseEventKind::ScrollDown if super::contains(self.hits.right_dock_area, point) => {
+                if let Some(peek) = &mut self.right_dock_state.quick_peek {
+                    peek.scroll_down();
+                    outcome.repaint = true;
+                } else if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                    self.right_dock_state.files_tab.scroll_down();
+                    outcome.repaint = true;
+                }
+            }
             MouseEventKind::Down(MouseButton::Left) => {
                 if self.selection.take().is_some() {
                     outcome.repaint = true;
@@ -1940,6 +1958,49 @@ impl ClientShellState {
                 self.workspace_press = None;
                 self.tab_press = None;
                 self.chrome_drag = None;
+                if let Some(tab_id) = self.hits.right_dock_tabs.iter().find_map(|(rect, id)| {
+                    super::contains(*rect, point).then_some(*id)
+                }) {
+                    self.jump_to_dock_tab(tab_id, outcome);
+                    return;
+                }
+                if super::contains(self.hits.right_dock_split_toggle, point) {
+                    self.right_dock_state.layout_mode = self.right_dock_state.layout_mode.toggle();
+                    self.mode = ClientShellMode::RightDock;
+                    outcome.repaint = true;
+                    return;
+                }
+                if self.right_dock_state.quick_peek.is_some() {
+                    self.right_dock_state.quick_peek = None;
+                    outcome.repaint = true;
+                    return;
+                }
+                if let Some(entry_index) = self.hits.right_dock_file_rows.iter().find_map(|(rect, idx)| {
+                    super::contains(*rect, point).then_some(*idx)
+                }) {
+                    self.mode = ClientShellMode::RightDock;
+                    let now = std::time::Instant::now();
+                    let is_double_click = self.last_dock_file_click.as_ref().is_some_and(|(last_idx, last_time)| {
+                        *last_idx == entry_index && now.duration_since(*last_time) <= std::time::Duration::from_millis(350)
+                    });
+                    self.last_dock_file_click = Some((entry_index, now));
+
+                    self.right_dock_state.files_tab.selected_index = entry_index;
+                    if let Some(entry) = self.right_dock_state.files_tab.entries.get(entry_index).cloned() {
+                        if entry.is_dir {
+                            self.right_dock_state.files_tab.toggle_expand(entry_index);
+                        } else if is_double_click {
+                            self.right_dock_state.activate_file_selection();
+                        }
+                    }
+                    outcome.repaint = true;
+                    return;
+                }
+                if super::contains(self.hits.right_dock_area, point) {
+                    self.mode = ClientShellMode::RightDock;
+                    outcome.repaint = true;
+                    return;
+                }
                 // The toggle is painted over the agent scrollbar's last cell.
                 if super::contains(self.hits.sidebar_toggle, point) {
                     self.sidebar_collapsed = !self.sidebar_collapsed;

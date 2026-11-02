@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use ratatui::buffer::Buffer;
@@ -125,13 +126,83 @@ impl DockTab for StatusTab {
     }
 }
 
-/// Pestaña 2: Files (Explorador perezoso con caché bajo demanda)
+/// Entrada individual dentro del árbol jerárquico del explorador de archivos
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileTreeEntry {
+    pub name: String,
+    pub relative_path: PathBuf,
+    pub is_dir: bool,
+    pub depth: usize,
+    pub is_expanded: bool,
+}
+
+fn scan_tree_dir(
+    root: &Path,
+    rel_dir: &Path,
+    depth: usize,
+    expanded: &BTreeSet<PathBuf>,
+    entries: &mut Vec<FileTreeEntry>,
+) {
+    if depth > 20 {
+        return;
+    }
+    let target_dir = if rel_dir.as_os_str().is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(rel_dir)
+    };
+
+    let Ok(dir_entries) = std::fs::read_dir(&target_dir) else {
+        return;
+    };
+
+    let mut items = Vec::new();
+    for entry in dir_entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == ".git" {
+            continue;
+        }
+        let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+        items.push((name, is_dir));
+    }
+
+    items.sort_by(|(name_a, dir_a), (name_b, dir_b)| {
+        dir_b
+            .cmp(dir_a)
+            .then_with(|| name_a.cmp(name_b))
+    });
+
+    for (name, is_dir) in items {
+        let rel_path = if rel_dir.as_os_str().is_empty() {
+            PathBuf::from(&name)
+        } else {
+            rel_dir.join(&name)
+        };
+        let is_expanded = is_dir && expanded.contains(&rel_path);
+        entries.push(FileTreeEntry {
+            name,
+            relative_path: rel_path.clone(),
+            is_dir,
+            depth,
+            is_expanded,
+        });
+
+        if is_expanded {
+            scan_tree_dir(root, &rel_path, depth + 1, expanded, entries);
+        }
+    }
+}
+
+/// Pestaña 2: Files (Explorador perezoso con caché bajo demanda y jerarquía)
 #[derive(Debug, Default)]
 pub struct FilesTab {
     is_dirty: bool,
     cached_root: Option<PathBuf>,
-    pub entries: Vec<(String, bool)>, // (Nombre, es_directorio)
+    pub entries: Vec<FileTreeEntry>,
+    pub expanded_dirs: BTreeSet<PathBuf>,
     pub selected_index: usize,
+    pub scroll_offset: usize,
+    pub visible_rows: usize,
 }
 
 impl DockTab for FilesTab {
@@ -153,46 +224,111 @@ impl DockTab for FilesTab {
 }
 
 impl FilesTab {
+    pub fn rebuild_tree(&mut self, root: &Path) {
+        self.cached_root = Some(root.to_path_buf());
+        self.entries.clear();
+        scan_tree_dir(root, Path::new(""), 0, &self.expanded_dirs, &mut self.entries);
+        if self.selected_index >= self.entries.len() {
+            self.selected_index = self.entries.len().saturating_sub(1);
+        }
+        self.ensure_selected_visible();
+        self.is_dirty = false;
+    }
+
     pub fn refresh_if_needed(&mut self, root: &Path) {
         if !self.is_dirty && self.cached_root.as_deref() == Some(root) {
             return;
         }
 
-        self.cached_root = Some(root.to_path_buf());
-        self.entries.clear();
-
-        if let Ok(dir_entries) = std::fs::read_dir(root) {
-            let mut list = Vec::new();
-            for entry in dir_entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') && name != ".agents" && name != ".github" {
-                    continue;
-                }
-                let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
-                list.push((name, is_dir));
-            }
-            // Ordenar: primero carpetas alfabéticamente, luego archivos
-            list.sort_by(|(name_a, dir_a), (name_b, dir_b)| {
-                dir_b.cmp(dir_a).then_with(|| name_a.cmp(name_b))
-            });
-            list.truncate(30); // Limitar a las primeras 30 entradas por seguridad de render
-            self.entries = list;
+        if self.cached_root.as_deref() != Some(root) {
+            self.expanded_dirs.clear();
+            self.selected_index = 0;
+            self.scroll_offset = 0;
         }
-        self.is_dirty = false;
+        self.rebuild_tree(root);
     }
 
-    pub fn selected_entry(&self) -> Option<&(String, bool)> {
+    pub fn selected_entry(&self) -> Option<&FileTreeEntry> {
         self.entries.get(self.selected_index)
+    }
+
+    pub fn set_selected_expanded(&mut self, expanded: bool) {
+        if let Some(entry) = self.entries.get(self.selected_index) {
+            if entry.is_dir {
+                let path = entry.relative_path.clone();
+                if expanded {
+                    self.expanded_dirs.insert(path);
+                } else {
+                    self.expanded_dirs.remove(&path);
+                }
+                if let Some(root) = self.cached_root.clone() {
+                    self.rebuild_tree(&root);
+                }
+            }
+        }
+    }
+
+    pub fn toggle_selected_expanded(&mut self) {
+        if let Some(entry) = self.entries.get(self.selected_index) {
+            if entry.is_dir {
+                let is_expanded = self.expanded_dirs.contains(&entry.relative_path);
+                self.set_selected_expanded(!is_expanded);
+            }
+        }
+    }
+
+    pub fn toggle_expand(&mut self, index: usize) {
+        if let Some(entry) = self.entries.get(index) {
+            if entry.is_dir {
+                let path = entry.relative_path.clone();
+                if self.expanded_dirs.contains(&path) {
+                    self.expanded_dirs.remove(&path);
+                } else {
+                    self.expanded_dirs.insert(path);
+                }
+                if let Some(root) = self.cached_root.clone() {
+                    self.rebuild_tree(&root);
+                }
+            }
+        }
     }
 
     pub fn select_next(&mut self) {
         if !self.entries.is_empty() && self.selected_index + 1 < self.entries.len() {
             self.selected_index += 1;
+            self.ensure_selected_visible();
         }
     }
 
     pub fn select_prev(&mut self) {
         self.selected_index = self.selected_index.saturating_sub(1);
+        self.ensure_selected_visible();
+    }
+
+    pub fn set_visible_rows(&mut self, rows: usize) {
+        self.visible_rows = rows;
+        self.ensure_selected_visible();
+    }
+
+    pub fn ensure_selected_visible(&mut self) {
+        if self.visible_rows == 0 {
+            return;
+        }
+        if self.selected_index < self.scroll_offset {
+            self.scroll_offset = self.selected_index;
+        } else if self.selected_index >= self.scroll_offset + self.visible_rows {
+            self.scroll_offset = self.selected_index.saturating_sub(self.visible_rows).saturating_add(1);
+        }
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
+
+    pub fn scroll_down(&mut self) {
+        if self.scroll_offset + self.visible_rows < self.entries.len() {
+            self.scroll_offset += 1;
+        }
     }
 }
 
@@ -276,7 +412,25 @@ impl RightDockState {
             self.files_tab.mark_dirty();
             self.changes_tab.mark_dirty();
             self.files_tab.selected_index = 0;
+            self.files_tab.scroll_offset = 0;
+            self.files_tab.expanded_dirs.clear();
             self.quick_peek = None; // Cierra cualquier preview si cambiaste de workspace
+        }
+    }
+
+    pub fn activate_file_selection(&mut self) {
+        if let Some(entry) = self.files_tab.selected_entry().cloned() {
+            if entry.is_dir {
+                self.files_tab.toggle_selected_expanded();
+            } else if let Some(root) = &self.files_tab.cached_root {
+                let file_path = root.join(&entry.relative_path);
+                let lines = if let Ok(content) = std::fs::read_to_string(&file_path) {
+                    content.lines().take(100).map(String::from).collect()
+                } else {
+                    vec!["[Error: No se pudo leer el archivo binario o inaccesible]".into()]
+                };
+                self.quick_peek = Some(QuickPeekState::new(entry.name, lines));
+            }
         }
     }
 }
@@ -287,10 +441,13 @@ pub(super) fn render_right_dock(
     config: &ClientShellConfig,
     dock_state: &mut RightDockState,
     context: Option<&WorkspaceContext>,
+    hits: &mut super::state::ShellHitMap,
 ) {
     if area.is_empty() {
         return;
     }
+
+    hits.right_dock_area = area;
 
     // Sincronización atómica de contexto si cambia el workspace (Punto 7)
     if let Some(ctx) = context {
@@ -320,12 +477,15 @@ pub(super) fn render_right_dock(
 
             if area.height >= 2 {
                 buffer.set_string(icon_x, area.y + 1, "⚡", Style::default().fg(status_color));
+                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 1, 2, 1), DockTabId::Status));
             }
             if area.height >= 4 {
                 buffer.set_string(icon_x, area.y + 3, "📁", Style::default().fg(files_color));
+                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Files));
             }
             if area.height >= 6 {
                 buffer.set_string(icon_x, area.y + 5, "±", Style::default().fg(changes_color));
+                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::Changes));
             }
         }
         return;
@@ -347,11 +507,15 @@ pub(super) fn render_right_dock(
     let changes_style = if dock_state.active_tab == DockTabId::Changes { active_style } else { inactive_style };
 
     buffer.set_string(content_x, tab_y, " ⚡ Status ", status_style);
+    hits.right_dock_tabs.push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Status));
+
     if content_x + 11 < area.right() {
         buffer.set_string(content_x + 11, tab_y, " 📁 Files ", files_style);
+        hits.right_dock_tabs.push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
     }
     if content_x + 22 < area.right() {
         buffer.set_string(content_x + 22, tab_y, " ± Changes ", changes_style);
+        hits.right_dock_tabs.push((Rect::new(content_x + 22, tab_y, 13, 1), DockTabId::Changes));
     }
 
     // Indicador Split View en el extremo derecho del header (Punto 5)
@@ -365,7 +529,9 @@ pub(super) fn render_right_dock(
         } else {
             Style::default().fg(config.palette.subtext0)
         };
-        buffer.set_string(area.right().saturating_sub(10), tab_y, split_label, split_style);
+        let split_x = area.right().saturating_sub(10);
+        buffer.set_string(split_x, tab_y, split_label, split_style);
+        hits.right_dock_split_toggle = Rect::new(split_x, tab_y, 10, 1);
     }
 
     // Línea separadora horizontal del header
@@ -399,7 +565,7 @@ pub(super) fn render_right_dock(
         if let Some(ctx) = context {
             dock_state.files_tab.refresh_if_needed(ctx.root_path);
         }
-        render_files_content(buffer, content_x, lower_body_y, lower_rows, area.width, config, &dock_state.files_tab);
+        render_files_content(buffer, content_x, lower_body_y, lower_rows, area.width, config, &mut dock_state.files_tab, hits);
     } else {
         match dock_state.active_tab {
             DockTabId::Status => {
@@ -409,7 +575,7 @@ pub(super) fn render_right_dock(
                 if let Some(ctx) = context {
                     dock_state.files_tab.refresh_if_needed(ctx.root_path);
                 }
-                render_files_content(buffer, content_x, body_y, available_rows, area.width, config, &dock_state.files_tab);
+                render_files_content(buffer, content_x, body_y, available_rows, area.width, config, &mut dock_state.files_tab, hits);
             }
             DockTabId::Changes => {
                 render_changes_content(buffer, content_x, body_y, available_rows, area.width, config, context);
@@ -456,34 +622,73 @@ fn render_files_content(
     rows: u16,
     width: u16,
     config: &ClientShellConfig,
-    files_tab: &FilesTab,
+    files_tab: &mut FilesTab,
+    hits: &mut super::state::ShellHitMap,
 ) {
     if rows < 2 || width < 12 {
         return;
     }
 
-    buffer.set_string(x + 1, y, "• EXPLORER [Space=Peek]", Style::default().fg(config.palette.accent));
-
     let visible_rows = (rows.saturating_sub(2)) as usize;
-    for (i, (name, is_dir)) in files_tab.entries.iter().take(visible_rows).enumerate() {
-        let row_y = y + 2 + (i as u16);
-        let is_selected = i == files_tab.selected_index;
-        let icon = if *is_dir { "📁" } else { "📄" };
+    files_tab.set_visible_rows(visible_rows);
+
+    let count_text = if !files_tab.entries.is_empty() {
+        format!("• EXPLORER ({}/{}) [Space=Peek]", files_tab.selected_index + 1, files_tab.entries.len())
+    } else {
+        "• EXPLORER [Empty]".to_string()
+    };
+    buffer.set_string(x + 1, y, count_text, Style::default().fg(config.palette.accent));
+
+    if files_tab.entries.is_empty() {
+        buffer.set_string(x + 1, y + 2, "(no files)", Style::default().fg(config.palette.subtext0));
+        return;
+    }
+
+    let start = files_tab.scroll_offset.min(files_tab.entries.len());
+    for (display_idx, (real_idx, entry)) in files_tab
+        .entries
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(visible_rows)
+        .enumerate()
+    {
+        let row_y = y + 2 + (display_idx as u16);
+        let row_rect = Rect::new(x, row_y, width, 1);
+        hits.right_dock_file_rows.push((row_rect, real_idx));
+
+        let is_selected = real_idx == files_tab.selected_index;
+        let indent = "  ".repeat(entry.depth);
+        let (chevron, icon) = if entry.is_dir {
+            if entry.is_expanded {
+                ("▾ ", "📁 ")
+            } else {
+                ("▸ ", "📁 ")
+            }
+        } else {
+            ("  ", "📄 ")
+        };
+
         let style = if is_selected {
             Style::default().fg(config.palette.accent).bg(config.palette.surface0)
-        } else if *is_dir {
+        } else if entry.is_dir {
             Style::default().fg(config.palette.blue)
+        } else if entry.name.starts_with('.') {
+            Style::default().fg(config.palette.subtext0)
         } else {
             Style::default().fg(config.palette.text)
         };
 
-        let label = format!("{icon} {name}");
+        let label = format!("{indent}{chevron}{icon}{}", entry.name);
         let truncated = if label.chars().count() > (width as usize).saturating_sub(3) {
             let limit = (width as usize).saturating_sub(4);
             format!("{}…", &label[..limit.min(label.len())])
         } else {
             label
         };
+        if is_selected {
+            buffer.set_style(row_rect, Style::default().bg(config.palette.surface0));
+        }
         buffer.set_string(x + 1, row_y, truncated, style);
     }
 }
@@ -583,6 +788,76 @@ fn render_quick_peek_modal(
 mod tests {
     use super::*;
 
+    struct TreeFixture(PathBuf);
+
+    impl TreeFixture {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "herdr-dock-tree-{}-{}", std::process::id(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+            ));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TreeFixture {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn tree_expansion_dotfiles_sorting_and_nested_preview() {
+        let root = TreeFixture::new();
+        for dir in [".config", ".git", "z-dir"] {
+            std::fs::create_dir(root.0.join(dir)).unwrap();
+        }
+        for file in [".bashrc", "a.txt", ".config/nested.txt"] {
+            std::fs::write(root.0.join(file), "hello\nworld").unwrap();
+        }
+        let mut dock = RightDockState::default();
+        dock.files_tab.refresh_if_needed(&root.0);
+        assert_eq!(dock.files_tab.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(),
+            [".config", "z-dir", ".bashrc", "a.txt"]);
+        dock.files_tab.set_selected_expanded(true);
+        assert!(dock.files_tab.entries[0].is_expanded);
+        assert_eq!(dock.files_tab.entries[1].relative_path, PathBuf::from(".config/nested.txt"));
+        assert_eq!(dock.files_tab.entries[1].depth, 1);
+        dock.files_tab.selected_index = 1;
+        dock.activate_file_selection();
+        assert_eq!(dock.quick_peek.as_ref().unwrap().lines, ["hello", "world"]);
+        dock.files_tab.selected_index = 0;
+        dock.files_tab.set_selected_expanded(false);
+        assert_eq!(dock.files_tab.entries.len(), 4);
+        dock.files_tab.refresh_if_needed(&root.0);
+        assert!(!dock.files_tab.entries[0].is_expanded);
+    }
+
+    #[test]
+    fn tree_navigation_scrolls_and_root_change_resets_tree() {
+        let root = TreeFixture::new();
+        for i in 0..40 {
+            std::fs::write(root.0.join(format!("file-{i:02}")), "").unwrap();
+        }
+        let mut files = FilesTab::default();
+        files.refresh_if_needed(&root.0);
+        files.set_visible_rows(3);
+        for _ in 0..39 { files.select_next(); }
+        assert_eq!(files.entries.len(), 40);
+        assert_eq!(files.selected_index, 39);
+        assert_eq!(files.scroll_offset, 37);
+        files.select_next();
+        assert_eq!(files.selected_index, 39);
+        for _ in 0..40 { files.select_prev(); }
+        assert_eq!((files.selected_index, files.scroll_offset), (0, 0));
+        let empty = TreeFixture::new();
+        files.refresh_if_needed(&empty.0);
+        assert!(files.entries.is_empty());
+        assert!(files.expanded_dirs.is_empty());
+        assert_eq!((files.selected_index, files.scroll_offset), (0, 0));
+    }
+
     #[test]
     fn test_dock_tab_lifecycle_hibernation_and_dirty() {
         let mut dock = RightDockState::default();
@@ -654,5 +929,123 @@ mod tests {
 
         dock.layout_mode = dock.layout_mode.toggle();
         assert_eq!(dock.layout_mode, DockLayoutMode::SingleTab);
+    }
+
+    #[test]
+    fn test_render_right_dock_records_tab_and_file_hits() {
+        let root = TreeFixture::new();
+        std::fs::write(root.0.join("sample.txt"), "hello").unwrap();
+
+        let mut dock = RightDockState::default();
+        dock.select_tab(DockTabId::Files);
+        dock.files_tab.refresh_if_needed(&root.0);
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(50, 0, 40, 25);
+        let mut buffer = Buffer::empty(area);
+        let mut hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_right_dock(&mut buffer, area, &config, &mut dock, None, &mut hits);
+
+        assert_eq!(hits.right_dock_area, area);
+        assert_eq!(hits.right_dock_tabs.len(), 3);
+        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
+        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::Changes);
+        assert_ne!(hits.right_dock_split_toggle, Rect::default());
+        assert!(!hits.right_dock_file_rows.is_empty());
+        assert_eq!(hits.right_dock_file_rows[0].1, 0);
+    }
+
+    #[test]
+    fn test_compact_rail_records_tab_hits() {
+        let mut dock = RightDockState::default();
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(77, 0, 3, 20);
+        let mut buffer = Buffer::empty(area);
+        let mut hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_right_dock(&mut buffer, area, &config, &mut dock, None, &mut hits);
+
+        assert_eq!(hits.right_dock_area, area);
+        assert_eq!(hits.right_dock_tabs.len(), 3);
+        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
+        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::Changes);
+    }
+
+    #[test]
+    fn test_mouse_clicks_and_scroll_in_right_dock() {
+        use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        use crate::client::shell::state::{ClientShellState, ClientShellMode, ClientShellInput};
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+
+        state.hits.right_dock_area = Rect::new(60, 0, 50, 20);
+        state.hits.right_dock_tabs = vec![
+            (Rect::new(61, 0, 11, 1), DockTabId::Status),
+            (Rect::new(72, 0, 11, 1), DockTabId::Files),
+            (Rect::new(83, 0, 13, 1), DockTabId::Changes),
+        ];
+        state.hits.right_dock_split_toggle = Rect::new(100, 0, 10, 1);
+        state.hits.right_dock_file_rows = vec![
+            (Rect::new(61, 2, 48, 1), 0),
+        ];
+
+        // 1. Click on Files tab
+        let mut outcome = ClientShellInput::default();
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 73,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.right_dock_state.active_tab, DockTabId::Files);
+        assert_eq!(state.mode, ClientShellMode::RightDock);
+
+        // 2. Click on Split toggle
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 102,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.right_dock_state.layout_mode, DockLayoutMode::SplitVertical);
+
+        // 3. Scroll Down
+        state.right_dock_state.files_tab.entries = vec![
+            FileTreeEntry {
+                name: "folder".into(),
+                relative_path: PathBuf::from("folder"),
+                is_dir: true,
+                depth: 0,
+                is_expanded: false,
+            },
+            FileTreeEntry {
+                name: "file1".into(),
+                relative_path: PathBuf::from("file1"),
+                is_dir: false,
+                depth: 0,
+                is_expanded: false,
+            },
+        ];
+        state.right_dock_state.files_tab.set_visible_rows(1);
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 65,
+                row: 5,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.right_dock_state.files_tab.scroll_offset, 1);
     }
 }

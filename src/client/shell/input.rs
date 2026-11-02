@@ -741,6 +741,22 @@ impl ClientShellState {
                                 outcome.repaint = true;
                             }
                         }
+                        KeyCode::PageUp => {
+                            if let Some(peek) = &mut self.right_dock_state.quick_peek {
+                                for _ in 0..10 {
+                                    peek.scroll_up();
+                                }
+                                outcome.repaint = true;
+                            }
+                        }
+                        KeyCode::PageDown => {
+                            if let Some(peek) = &mut self.right_dock_state.quick_peek {
+                                for _ in 0..10 {
+                                    peek.scroll_down();
+                                }
+                                outcome.repaint = true;
+                            }
+                        }
                         _ => {}
                     }
                     return None;
@@ -777,27 +793,22 @@ impl ClientShellState {
                             outcome.repaint = true;
                         }
                     }
-                    KeyCode::Char(' ') | KeyCode::Char('p') => {
+                    KeyCode::Right | KeyCode::Char('l') => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
-                            if let Some((name, is_dir)) = self.right_dock_state.files_tab.selected_entry().cloned() {
-                                if !is_dir {
-                                    let active_ws = self.snapshot.as_ref().and_then(|snap| {
-                                        snap.workspaces.iter().find(|ws| {
-                                            snap.focused_workspace_id.as_deref() == Some(&ws.workspace_id)
-                                        })
-                                    });
-                                    if let Some(ws) = active_ws {
-                                        let file_path = std::path::Path::new(&ws.new_workspace_cwd).join(&name);
-                                        let lines = if let Ok(content) = std::fs::read_to_string(&file_path) {
-                                            content.lines().take(100).map(String::from).collect()
-                                        } else {
-                                            vec!["[Error: No se pudo leer el archivo binario o inaccesible]".into()]
-                                        };
-                                        self.right_dock_state.quick_peek = Some(super::dock::QuickPeekState::new(name, lines));
-                                        outcome.repaint = true;
-                                    }
-                                }
-                            }
+                            self.right_dock_state.files_tab.set_selected_expanded(true);
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Left | KeyCode::Char('h') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            self.right_dock_state.files_tab.set_selected_expanded(false);
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char(' ') | KeyCode::Char('p') | KeyCode::Enter => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            self.right_dock_state.activate_file_selection();
+                            outcome.repaint = true;
                         }
                     }
                     _ => {}

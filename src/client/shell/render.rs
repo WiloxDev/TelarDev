@@ -347,9 +347,14 @@ pub(super) fn render_shell(
             config,
             state.right_dock_state,
             ws_context.as_ref(),
+            &mut hits,
         );
     }
     if !config.mouse_capture {
+        hits.right_dock_area = Rect::default();
+        hits.right_dock_tabs.clear();
+        hits.right_dock_split_toggle = Rect::default();
+        hits.right_dock_file_rows.clear();
         hits.sidebar_divider = Rect::default();
         hits.sidebar_section_divider = Rect::default();
         hits.workspace_scrollbar = Rect::default();
