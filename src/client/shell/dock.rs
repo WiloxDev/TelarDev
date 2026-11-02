@@ -5,6 +5,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
+use super::dock_icons::resolve_file_icon;
 use super::state::ClientShellConfig;
 
 /// Identificador único de cada pestaña del inspector derecho
@@ -836,38 +837,67 @@ fn render_files_content(
         hits.right_dock_file_rows.push((row_rect, real_idx));
 
         let is_selected = real_pos == files_tab.selected_index;
-        let indent = "  ".repeat(entry.depth);
-        let (chevron, icon) = if entry.is_dir {
-            if entry.is_expanded {
-                ("▾ ", "📁 ")
-            } else {
-                ("▸ ", "📁 ")
-            }
-        } else {
-            ("  ", "📄 ")
-        };
-
-        let style = if is_selected {
-            Style::default().fg(config.palette.accent).bg(config.palette.surface0)
-        } else if entry.is_dir {
-            Style::default().fg(config.palette.blue)
-        } else if entry.name.starts_with('.') {
-            Style::default().fg(config.palette.subtext0)
-        } else {
-            Style::default().fg(config.palette.text)
-        };
-
-        let label = format!("{indent}{chevron}{icon}{}", entry.name);
-        let truncated = if label.chars().count() > (width as usize).saturating_sub(3) {
-            let limit = (width as usize).saturating_sub(4);
-            format!("{}…", &label[..limit.min(label.len())])
-        } else {
-            label
-        };
         if is_selected {
             buffer.set_style(row_rect, Style::default().bg(config.palette.surface0));
         }
-        buffer.set_string(x + 1, row_y, truncated, style);
+
+        let max_right = x + width.saturating_sub(1);
+        let mut curr_x = x + 1;
+
+        // 1. Indentación limpia (2 espacios por nivel)
+        let indent_cols = (entry.depth as u16) * 2;
+        curr_x = curr_x.saturating_add(indent_cols);
+
+        if curr_x >= max_right {
+            continue;
+        }
+
+        // 2. Prefijo: Chevron minimalista para carpetas, icono Seti para archivos
+        let (text_start_x, name_style) = if entry.is_dir {
+            let chevron = if entry.is_expanded { "∨" } else { "›" };
+            let chevron_style = if is_selected {
+                Style::default().fg(config.palette.accent)
+            } else {
+                Style::default().fg(config.palette.subtext0)
+            };
+            buffer.set_string(curr_x, row_y, chevron, chevron_style);
+
+            let name_style = if is_selected {
+                Style::default().fg(config.palette.accent)
+            } else if entry.name.starts_with('.') {
+                Style::default().fg(config.palette.subtext0)
+            } else {
+                Style::default().fg(config.palette.text)
+            };
+            (curr_x + 2, name_style)
+        } else {
+            let icon = resolve_file_icon(&entry.name);
+            let icon_style = Style::default().fg(icon.color);
+            buffer.set_string(curr_x, row_y, icon.glyph, icon_style);
+            let icon_w = unicode_width::UnicodeWidthStr::width(icon.glyph) as u16;
+
+            let name_style = if is_selected {
+                Style::default().fg(config.palette.accent)
+            } else if entry.name.starts_with('.') {
+                Style::default().fg(config.palette.subtext0)
+            } else {
+                Style::default().fg(config.palette.text)
+            };
+            (curr_x + icon_w + 1, name_style)
+        };
+
+        // 3. Nombre del archivo/directorio con truncamiento seguro
+        if text_start_x < max_right {
+            let available_chars = (max_right - text_start_x) as usize;
+            let name_chars_count = entry.name.chars().count();
+            if name_chars_count > available_chars {
+                let limit = available_chars.saturating_sub(1);
+                let truncated: String = entry.name.chars().take(limit).collect();
+                buffer.set_string(text_start_x, row_y, format!("{truncated}…"), name_style);
+            } else {
+                buffer.set_string(text_start_x, row_y, &entry.name, name_style);
+            }
+        }
     }
 }
 
@@ -1352,5 +1382,44 @@ mod tests {
             &mut outcome,
         );
         assert_eq!(state.right_dock_state.files_tab.scroll_offset, 1);
+    }
+
+    #[test]
+    fn test_render_files_seti_icons_and_chevrons() {
+        let root = TreeFixture::new();
+        std::fs::create_dir(root.0.join("src")).unwrap();
+        std::fs::write(root.0.join("package.json"), "{}").unwrap();
+        std::fs::write(root.0.join("tsconfig.json"), "{}").unwrap();
+
+        let mut dock = RightDockState::default();
+        dock.select_tab(DockTabId::Files);
+        dock.files_tab.refresh_if_needed(&root.0);
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buffer = Buffer::empty(area);
+        let mut hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_right_dock(&mut buffer, area, &config, &mut dock, None, &mut hits);
+
+        // Validamos que se hayan detectado filas
+        assert_eq!(hits.right_dock_file_rows.len(), 3);
+
+        // Verificamos que el buffer contiene el chevron cerrado › para la carpeta src
+        // y los iconos Seti para package.json ({}) y tsconfig.json (TS)
+        let mut row_contents = Vec::new();
+        for row in 4..7 {
+            let mut line = String::new();
+            for col in 0..40 {
+                line.push_str(buffer[(col, row)].symbol());
+            }
+            row_contents.push(line);
+        }
+
+        let full_text = row_contents.join("\n");
+        assert!(full_text.contains('›'), "Debe contener el chevron de carpeta cerrada ›");
+        assert!(full_text.contains("src"), "Debe contener el directorio src");
+        assert!(full_text.contains("{}"), "Debe contener el icono {{}} para package.json");
+        assert!(full_text.contains("TS"), "Debe contener el icono TS para tsconfig.json");
     }
 }
