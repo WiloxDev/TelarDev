@@ -863,6 +863,35 @@ impl ClientShellState {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.mark_dirty();
                             outcome.repaint = true;
+                        } else if self.right_dock_state.active_tab == super::dock::DockTabId::Status
+                        {
+                            self.right_dock_state.status_tab.mark_dirty();
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char(c @ '1'..='9') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status {
+                            let sec_id = (c as u8) - b'0';
+                            self.right_dock_state.status_tab.toggle_section(sec_id);
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('c') | KeyCode::Char('C') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status {
+                            self.right_dock_state.status_tab.collapse_all();
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('d') | KeyCode::Char('D') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status {
+                            self.right_dock_state.status_tab.expand_all();
+                            outcome.repaint = true;
+                        }
+                    }
+                    KeyCode::Char('q') | KeyCode::Char('Q') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status {
+                            self.mode = ClientShellMode::Terminal;
+                            outcome.repaint = true;
                         }
                     }
                     _ => {}

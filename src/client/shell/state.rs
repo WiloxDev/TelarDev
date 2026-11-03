@@ -158,6 +158,7 @@ pub(super) struct ShellHitMap {
     pub(super) right_dock_tabs: Vec<(Rect, super::dock::DockTabId)>,
     pub(super) right_dock_split_toggle: Rect,
     pub(super) right_dock_file_rows: Vec<(Rect, usize)>,
+    pub(super) right_dock_section_toggles: Vec<(Rect, u8)>,
 }
 
 #[derive(Clone)]

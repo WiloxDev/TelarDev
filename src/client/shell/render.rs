@@ -389,6 +389,7 @@ pub(super) fn render_shell(
         hits.right_dock_tabs.clear();
         hits.right_dock_split_toggle = Rect::default();
         hits.right_dock_file_rows.clear();
+        hits.right_dock_section_toggles.clear();
         hits.sidebar_divider = Rect::default();
         hits.sidebar_section_divider = Rect::default();
         hits.workspace_scrollbar = Rect::default();

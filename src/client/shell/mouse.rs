@@ -1971,6 +1971,14 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if let Some(sec_id) = self.hits.right_dock_section_toggles.iter().find_map(|(rect, id)| {
+                    super::contains(*rect, point).then_some(*id)
+                }) {
+                    self.right_dock_state.status_tab.toggle_section(sec_id);
+                    self.mode = ClientShellMode::RightDock;
+                    outcome.repaint = true;
+                    return;
+                }
                 if self.right_dock_state.quick_peek.is_some() {
                     self.right_dock_state.quick_peek = None;
                     outcome.repaint = true;

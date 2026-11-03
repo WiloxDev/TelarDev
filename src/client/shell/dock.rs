@@ -104,13 +104,67 @@ pub trait DockTab: Send + Sync {
 }
 
 /// Pestaña 1: Status (Gentle HUD)
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct StatusTab {
     is_dirty: bool,
     pub active_agent_status: Option<String>,
     pub running_jobs_count: usize,
     pub todos_summary: Option<String>,
+    pub collapsed_sections: BTreeSet<u8>,
+    pub telemetry: super::telemetry::StatusSnapshot,
+}
+
+impl Default for StatusTab {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StatusTab {
+    pub fn new() -> Self {
+        let mut collapsed = BTreeSet::new();
+        // Proyecto (3) y SDD (5) colapsados por defecto para ajuste ergonómico
+        collapsed.insert(3);
+        collapsed.insert(5);
+        Self {
+            is_dirty: true,
+            active_agent_status: None,
+            running_jobs_count: 0,
+            todos_summary: None,
+            collapsed_sections: collapsed,
+            telemetry: super::telemetry::StatusSnapshot::default(),
+        }
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.is_dirty = true;
+    }
+
+    pub fn toggle_section(&mut self, section: u8) {
+        if self.collapsed_sections.contains(&section) {
+            self.collapsed_sections.remove(&section);
+        } else {
+            self.collapsed_sections.insert(section);
+        }
+        self.mark_dirty();
+    }
+
+    pub fn collapse_all(&mut self) {
+        for s in 1..=9 {
+            self.collapsed_sections.insert(s);
+        }
+        self.mark_dirty();
+    }
+
+    pub fn expand_all(&mut self) {
+        self.collapsed_sections.clear();
+        self.mark_dirty();
+    }
+
+    pub fn is_collapsed(&self, section: u8) -> bool {
+        self.collapsed_sections.contains(&section)
+    }
 }
 
 impl DockTab for StatusTab {
@@ -176,9 +230,7 @@ fn scan_tree_dir(
     }
 
     items.sort_by(|(name_a, dir_a), (name_b, dir_b)| {
-        dir_b
-            .cmp(dir_a)
-            .then_with(|| name_a.cmp(name_b))
+        dir_b.cmp(dir_a).then_with(|| name_a.cmp(name_b))
     });
 
     for (name, is_dir) in items {
@@ -256,7 +308,14 @@ impl FilesTab {
     pub fn rebuild_tree(&mut self, root: &Path) {
         self.cached_root = Some(root.to_path_buf());
         self.entries.clear();
-        scan_tree_dir(root, Path::new(""), 0, &self.expanded_dirs, self.show_hidden, &mut self.entries);
+        scan_tree_dir(
+            root,
+            Path::new(""),
+            0,
+            &self.expanded_dirs,
+            self.show_hidden,
+            &mut self.entries,
+        );
         if self.selected_index >= self.entries.len() {
             self.selected_index = self.entries.len().saturating_sub(1);
         }
@@ -336,7 +395,10 @@ impl FilesTab {
                     .enumerate()
                     .filter(|(_, e)| {
                         e.name.to_lowercase().contains(&q)
-                            || e.relative_path.to_string_lossy().to_lowercase().contains(&q)
+                            || e.relative_path
+                                .to_string_lossy()
+                                .to_lowercase()
+                                .contains(&q)
                     })
                     .map(|(i, _)| i)
                     .collect()
@@ -426,7 +488,10 @@ impl FilesTab {
         if self.selected_index < self.scroll_offset {
             self.scroll_offset = self.selected_index;
         } else if self.selected_index >= self.scroll_offset + self.visible_rows {
-            self.scroll_offset = self.selected_index.saturating_sub(self.visible_rows).saturating_add(1);
+            self.scroll_offset = self
+                .selected_index
+                .saturating_sub(self.visible_rows)
+                .saturating_add(1);
         }
     }
 
@@ -559,8 +624,12 @@ impl RightDockState {
     }
 
     /// Elimina de la caché los workspaces que ya no existen en el servidor
-    pub fn prune_dead_workspaces(&mut self, active_workspace_ids: &std::collections::HashSet<&str>) {
-        self.workspace_cache.retain(|id, _| active_workspace_ids.contains(id.as_str()));
+    pub fn prune_dead_workspaces(
+        &mut self,
+        active_workspace_ids: &std::collections::HashSet<&str>,
+    ) {
+        self.workspace_cache
+            .retain(|id, _| active_workspace_ids.contains(id.as_str()));
     }
 
     pub fn activate_file_selection(&mut self) {
@@ -616,21 +685,36 @@ pub(super) fn render_right_dock(
         let icon_x = area.x + 1;
         if area.width >= 3 {
             let active = dock_state.active_tab;
-            let status_color = if active == DockTabId::Status { config.palette.accent } else { config.palette.subtext0 };
-            let files_color = if active == DockTabId::Files { config.palette.accent } else { config.palette.subtext0 };
-            let changes_color = if active == DockTabId::Changes { config.palette.accent } else { config.palette.subtext0 };
+            let status_color = if active == DockTabId::Status {
+                config.palette.accent
+            } else {
+                config.palette.subtext0
+            };
+            let files_color = if active == DockTabId::Files {
+                config.palette.accent
+            } else {
+                config.palette.subtext0
+            };
+            let changes_color = if active == DockTabId::Changes {
+                config.palette.accent
+            } else {
+                config.palette.subtext0
+            };
 
             if area.height >= 2 {
                 buffer.set_string(icon_x, area.y + 1, "⚡", Style::default().fg(status_color));
-                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 1, 2, 1), DockTabId::Status));
+                hits.right_dock_tabs
+                    .push((Rect::new(icon_x, area.y + 1, 2, 1), DockTabId::Status));
             }
             if area.height >= 4 {
                 buffer.set_string(icon_x, area.y + 3, "📁", Style::default().fg(files_color));
-                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Files));
+                hits.right_dock_tabs
+                    .push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Files));
             }
             if area.height >= 6 {
                 buffer.set_string(icon_x, area.y + 5, "±", Style::default().fg(changes_color));
-                hits.right_dock_tabs.push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::Changes));
+                hits.right_dock_tabs
+                    .push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::Changes));
             }
         }
         return;
@@ -647,20 +731,35 @@ pub(super) fn render_right_dock(
         .fg(config.palette.subtext0)
         .bg(config.palette.surface0);
 
-    let status_style = if dock_state.active_tab == DockTabId::Status { active_style } else { inactive_style };
-    let files_style = if dock_state.active_tab == DockTabId::Files { active_style } else { inactive_style };
-    let changes_style = if dock_state.active_tab == DockTabId::Changes { active_style } else { inactive_style };
+    let status_style = if dock_state.active_tab == DockTabId::Status {
+        active_style
+    } else {
+        inactive_style
+    };
+    let files_style = if dock_state.active_tab == DockTabId::Files {
+        active_style
+    } else {
+        inactive_style
+    };
+    let changes_style = if dock_state.active_tab == DockTabId::Changes {
+        active_style
+    } else {
+        inactive_style
+    };
 
     buffer.set_string(content_x, tab_y, " ⚡ Status ", status_style);
-    hits.right_dock_tabs.push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Status));
+    hits.right_dock_tabs
+        .push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Status));
 
     if content_x + 11 < area.right() {
         buffer.set_string(content_x + 11, tab_y, " 📁 Files ", files_style);
-        hits.right_dock_tabs.push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
+        hits.right_dock_tabs
+            .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
     }
     if content_x + 22 < area.right() {
         buffer.set_string(content_x + 22, tab_y, " ± Changes ", changes_style);
-        hits.right_dock_tabs.push((Rect::new(content_x + 22, tab_y, 13, 1), DockTabId::Changes));
+        hits.right_dock_tabs
+            .push((Rect::new(content_x + 22, tab_y, 13, 1), DockTabId::Changes));
     }
 
     // Indicador Split View en el extremo derecho del header (Punto 5)
@@ -670,7 +769,9 @@ pub(super) fn render_right_dock(
             DockLayoutMode::SplitVertical => "[⊟ Single]",
         };
         let split_style = if dock_state.layout_mode == DockLayoutMode::SplitVertical {
-            Style::default().fg(config.palette.peach).bg(config.palette.surface0)
+            Style::default()
+                .fg(config.palette.peach)
+                .bg(config.palette.surface0)
         } else {
             Style::default().fg(config.palette.subtext0)
         };
@@ -696,7 +797,17 @@ pub(super) fn render_right_dock(
 
     if dock_state.layout_mode == DockLayoutMode::SplitVertical && available_rows >= 14 {
         let half_rows = available_rows / 2;
-        render_status_content(buffer, content_x, body_y, half_rows, area.width, config, context);
+        render_status_content(
+            buffer,
+            content_x,
+            body_y,
+            half_rows,
+            area.width,
+            config,
+            context,
+            &mut dock_state.status_tab,
+            Some(hits),
+        );
 
         let split_divider_y = body_y + half_rows;
         for x in content_x..area.right() {
@@ -710,20 +821,56 @@ pub(super) fn render_right_dock(
         if let Some(ctx) = context {
             dock_state.files_tab.refresh_if_needed(ctx.root_path);
         }
-        render_files_content(buffer, content_x, lower_body_y, lower_rows, area.width, config, &mut dock_state.files_tab, hits);
+        render_files_content(
+            buffer,
+            content_x,
+            lower_body_y,
+            lower_rows,
+            area.width,
+            config,
+            &mut dock_state.files_tab,
+            hits,
+        );
     } else {
         match dock_state.active_tab {
             DockTabId::Status => {
-                render_status_content(buffer, content_x, body_y, available_rows, area.width, config, context);
+                render_status_content(
+                    buffer,
+                    content_x,
+                    body_y,
+                    available_rows,
+                    area.width,
+                    config,
+                    context,
+                    &mut dock_state.status_tab,
+                    Some(hits),
+                );
             }
             DockTabId::Files => {
                 if let Some(ctx) = context {
                     dock_state.files_tab.refresh_if_needed(ctx.root_path);
                 }
-                render_files_content(buffer, content_x, body_y, available_rows, area.width, config, &mut dock_state.files_tab, hits);
+                render_files_content(
+                    buffer,
+                    content_x,
+                    body_y,
+                    available_rows,
+                    area.width,
+                    config,
+                    &mut dock_state.files_tab,
+                    hits,
+                );
             }
             DockTabId::Changes => {
-                render_changes_content(buffer, content_x, body_y, available_rows, area.width, config, context);
+                render_changes_content(
+                    buffer,
+                    content_x,
+                    body_y,
+                    available_rows,
+                    area.width,
+                    config,
+                    context,
+                );
             }
         }
     }
@@ -731,6 +878,176 @@ pub(super) fn render_right_dock(
     // Si hay un Quick Peek activo, renderizar el modal flotante (Punto 6)
     if let Some(peek) = &dock_state.quick_peek {
         render_quick_peek_modal(buffer, area, config, peek);
+    }
+}
+
+fn draw_card_box(
+    buffer: &mut Buffer,
+    x: u16,
+    y: u16,
+    w: u16,
+    h: u16,
+    title: &str,
+    badge: &str,
+    border_style: Style,
+    title_style: Style,
+    badge_style: Style,
+    hits: Option<&mut super::state::ShellHitMap>,
+    section_id: Option<u8>,
+) {
+    if w < 6 || h == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
+        return;
+    }
+    let actual_w = w.min(buffer.area.right().saturating_sub(x));
+    let right_x = x + actual_w.saturating_sub(1);
+
+    // Caso colapsado (h == 1):
+    if h == 1 {
+        if let Some(c) = buffer.cell_mut((x, y)) {
+            c.set_symbol("╭").set_style(border_style);
+        }
+        if let Some(c) = buffer.cell_mut((right_x, y)) {
+            c.set_symbol("╮").set_style(border_style);
+        }
+        for col in (x + 1)..right_x {
+            if let Some(c) = buffer.cell_mut((col, y)) {
+                c.set_symbol("─").set_style(border_style);
+            }
+        }
+        let title_x = x + 2;
+        let badge_len = badge.chars().count() as u16;
+        let badge_x = if badge_len > 0 && right_x > badge_len + 1 {
+            right_x.saturating_sub(badge_len + 1)
+        } else {
+            right_x
+        };
+        let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
+        if max_title_len > 0 && !title.is_empty() {
+            buffer.set_stringn(title_x, y, format!(" {title} "), max_title_len, title_style);
+        }
+        if badge_len > 0 && badge_x > title_x {
+            buffer.set_stringn(badge_x, y, badge, badge_len as usize, badge_style);
+            if let (Some(h), Some(sec)) = (hits, section_id) {
+                h.right_dock_section_toggles
+                    .push((Rect::new(badge_x, y, badge_len, 1), sec));
+            }
+        }
+        return;
+    }
+
+    let actual_h = h.min(buffer.area.bottom().saturating_sub(y));
+    let bottom_y = y + actual_h.saturating_sub(1);
+
+    // Esquinas redondeadas
+    if let Some(c) = buffer.cell_mut((x, y)) {
+        c.set_symbol("╭").set_style(border_style);
+    }
+    if let Some(c) = buffer.cell_mut((right_x, y)) {
+        c.set_symbol("╮").set_style(border_style);
+    }
+    if let Some(c) = buffer.cell_mut((x, bottom_y)) {
+        c.set_symbol("╰").set_style(border_style);
+    }
+    if let Some(c) = buffer.cell_mut((right_x, bottom_y)) {
+        c.set_symbol("╯").set_style(border_style);
+    }
+
+    // Bordes laterales
+    for row in (y + 1)..bottom_y {
+        if let Some(c) = buffer.cell_mut((x, row)) {
+            c.set_symbol("│").set_style(border_style);
+        }
+        if let Some(c) = buffer.cell_mut((right_x, row)) {
+            c.set_symbol("│").set_style(border_style);
+        }
+    }
+
+    // Borde inferior
+    for col in (x + 1)..right_x {
+        if let Some(c) = buffer.cell_mut((col, bottom_y)) {
+            c.set_symbol("─").set_style(border_style);
+        }
+    }
+
+    // Borde superior con Título y Badge
+    for col in (x + 1)..right_x {
+        if let Some(c) = buffer.cell_mut((col, y)) {
+            c.set_symbol("─").set_style(border_style);
+        }
+    }
+
+    // Título a la izquierda: "╭─ Titulo ──"
+    let title_x = x + 2;
+    let badge_len = badge.chars().count() as u16;
+    let badge_x = if badge_len > 0 && right_x > badge_len + 1 {
+        right_x.saturating_sub(badge_len + 1)
+    } else {
+        right_x
+    };
+
+    let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
+    if max_title_len > 0 && !title.is_empty() {
+        buffer.set_stringn(title_x, y, format!(" {title} "), max_title_len, title_style);
+    }
+
+    // Badge a la derecha: "[-]╮"
+    if badge_len > 0 && badge_x > title_x {
+        buffer.set_stringn(badge_x, y, badge, badge_len as usize, badge_style);
+        if let (Some(h), Some(sec)) = (hits, section_id) {
+            h.right_dock_section_toggles
+                .push((Rect::new(badge_x, y, badge_len, 1), sec));
+        }
+    }
+}
+
+fn render_mini_bar(
+    buffer: &mut Buffer,
+    x: u16,
+    y: u16,
+    width: u16,
+    percent: u8,
+    active_style: Style,
+    inactive_style: Style,
+) {
+    if width == 0 || y >= buffer.area.bottom() {
+        return;
+    }
+    let filled = ((width as u32 * percent.min(100) as u32) / 100) as u16;
+    for i in 0..width {
+        let col = x + i;
+        if col >= buffer.area.right() {
+            break;
+        }
+        if let Some(cell) = buffer.cell_mut((col, y)) {
+            if i < filled {
+                cell.set_symbol("━").set_style(active_style);
+            } else {
+                cell.set_symbol("─").set_style(inactive_style);
+            }
+        }
+    }
+}
+
+fn render_card_kv(
+    buffer: &mut Buffer,
+    x: u16,
+    y: u16,
+    inner_w: u16,
+    key: &str,
+    val: &str,
+    key_style: Style,
+    val_style: Style,
+) {
+    if inner_w < 6 || y >= buffer.area.bottom() {
+        return;
+    }
+    let key_col_w = (key.chars().count() as u16).min(12);
+    let val_x = x + key_col_w + 1;
+    let max_val_len = (inner_w.saturating_sub(key_col_w + 1)) as usize;
+
+    buffer.set_stringn(x, y, key, key_col_w as usize, key_style);
+    if val_x < buffer.area.right() && max_val_len > 0 {
+        buffer.set_stringn(val_x, y, val, max_val_len, val_style);
     }
 }
 
@@ -742,6 +1059,8 @@ fn render_status_content(
     width: u16,
     config: &ClientShellConfig,
     context: Option<&WorkspaceContext>,
+    status_tab: &mut StatusTab,
+    mut hits: Option<&mut super::state::ShellHitMap>,
 ) {
     if rows < 4 || width < 12 {
         return;
@@ -751,110 +1070,674 @@ fn render_status_content(
     let is_preview = context.map(|c| c.is_preview).unwrap_or(false);
     let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
-    let (hud_title, title_color) = if is_preview {
-        ("• GENTLE HUD [Preview]", config.palette.yellow)
-    } else {
-        ("• GENTLE HUD", config.palette.accent)
-    };
+    let card_border_style = Style::default().fg(config.palette.surface_dim);
+    let card_title_style = Style::default().fg(config.palette.peach);
+    let card_badge_style = Style::default().fg(config.palette.subtext0);
+    let key_style = Style::default().fg(config.palette.yellow);
+    let val_cyan = Style::default().fg(config.palette.teal);
+    let val_text = Style::default().fg(config.palette.text);
+    let val_dim = Style::default().fg(config.palette.subtext0);
+    let card_w = width.saturating_sub(2);
+    let inner_w = card_w.saturating_sub(2);
 
-    let max_width = width.saturating_sub(2).min(buffer.area.right().saturating_sub(x + 1));
-    buffer.set_stringn(x + 1, y, hud_title, max_width as usize, Style::default().fg(title_color));
-    let mut row = y + 1;
-    if config.right_dock_show_state {
-        let agent_st = context.and_then(|c| c.agent_status).filter(|s| *s != crate::api::schema::AgentStatus::Unknown).map(super::status_text).unwrap_or("unavailable");
-        let agent_display = if let Some(name) = context.and_then(|c| c.agent_name) {
-            format!("{name} ({agent_st})")
-        } else {
-            agent_st.to_string()
-        };
-        buffer.set_stringn(x + 1, row, format!("Workspace: {ws_name}"), max_width as usize, Style::default().fg(config.palette.text));
-        row += 1;
-        buffer.set_stringn(x + 1, row, format!("Agent:     {agent_display}"), max_width as usize, Style::default().fg(config.palette.text));
-        row += 1;
-    }
-    if config.right_dock_show_git && row < y + rows {
-        buffer.set_stringn(x + 1, row, format!("Branch:    {branch_name}"), max_width as usize, Style::default().fg(config.palette.mauve));
-        row += 1;
-        if row < y + rows {
-            buffer.set_stringn(x + 1, row, "Git:       unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
-            row += 1;
-        }
-    }
-    if config.right_dock_show_engram && row < y + rows {
-        buffer.set_stringn(x + 1, row, "• ENGRAM   [offline]", max_width as usize, Style::default().fg(config.palette.peach));
-        row += 1;
-        if row < y + rows {
-            buffer.set_stringn(x + 1, row, "Obs:       unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
-            row += 1;
-        }
-    }
-    if config.right_dock_show_context && row < y + rows {
-        let tokens_val = context
-            .and_then(|c| c.agent_tokens)
-            .and_then(|tokens| {
-                tokens.iter().find_map(|(k, v)| {
-                    if k.contains("token") || k.contains("context") {
-                        Some(v.as_str())
-                    } else {
-                        None
-                    }
-                })
-            })
+    // 1. Cabecera superior centrada: ":: TELAR · GENTLE-AI ::"
+    let banner = if is_preview {
+        ":: TELAR [Preview] · GENTLE-AI ::"
+    } else {
+        ":: TELAR · GENTLE-AI ::"
+    };
+    let banner_len = banner.chars().count() as u16;
+    let banner_x = x + (width.saturating_sub(banner_len)) / 2;
+    buffer.set_stringn(
+        banner_x,
+        y,
+        banner,
+        banner_len as usize,
+        Style::default().fg(config.palette.accent),
+    );
+
+    let mut cur_y = y + 1;
+    let bottom_limit = y + rows;
+
+    // 1. Tarjeta: Estado (Workspace, Agent, Modelo, Mem) (Sección 1)
+    if config.right_dock_show_state && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(1);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let agent_st = context
+            .and_then(|c| c.agent_status)
+            .filter(|s| *s != crate::api::schema::AgentStatus::Unknown)
+            .map(super::status_text)
             .unwrap_or("unavailable");
-        buffer.set_stringn(x + 1, row, format!("Context:   {tokens_val}"), max_width as usize, Style::default().fg(config.palette.blue));
-        row += 1;
+
+        let header_title = format!("Estado · -- {agent_st}");
+        let card_h = if is_col {
+            1
+        } else {
+            5u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header_title,
+                badge,
+                card_border_style,
+                card_title_style,
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(1),
+            );
+
+            if !is_col && card_h >= 4 {
+                let body_x = x + 2;
+                let mut row_offset = 1;
+                render_card_kv(
+                    buffer,
+                    body_x,
+                    cur_y + row_offset,
+                    inner_w,
+                    "Proyecto:  ",
+                    ws_name,
+                    key_style,
+                    val_cyan,
+                );
+                row_offset += 1;
+                if config.right_dock_show_git {
+                    render_card_kv(
+                        buffer,
+                        body_x,
+                        cur_y + row_offset,
+                        inner_w,
+                        "Rama:      ",
+                        branch_name,
+                        key_style,
+                        Style::default().fg(config.palette.mauve),
+                    );
+                    row_offset += 1;
+                }
+                if cur_y + row_offset < bottom_limit {
+                    render_card_kv(
+                        buffer,
+                        body_x,
+                        cur_y + row_offset,
+                        inner_w,
+                        "Modelo:    ",
+                        &status_tab.telemetry.model_name,
+                        key_style,
+                        val_cyan,
+                    );
+                }
+            }
+            cur_y += card_h;
+        }
     }
-    if config.right_dock_show_cpamc && row < y + rows {
+
+    // 2. Tarjeta: Contexto y Tokens (Sección 2)
+    if config.right_dock_show_context && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(2);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let card_h = if is_col {
+            1
+        } else {
+            4u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                "Contexto",
+                badge,
+                card_border_style,
+                card_title_style,
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(2),
+            );
+
+            if !is_col && card_h >= 3 {
+                let body_x = x + 2;
+                let tokens_val = context
+                    .and_then(|c| c.agent_tokens)
+                    .and_then(|tokens| {
+                        tokens.iter().find_map(|(k, v)| {
+                            if k.contains("token") || k.contains("context") {
+                                Some(v.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or("179.2k");
+
+                let line = format!(
+                    "Context:   {tokens_val} / 1.0M  • {}",
+                    status_tab.telemetry.context.status_label
+                );
+                buffer.set_stringn(
+                    body_x,
+                    cur_y + 1,
+                    line,
+                    inner_w as usize,
+                    Style::default().fg(config.palette.green),
+                );
+
+                if cur_y + 2 < bottom_limit {
+                    render_mini_bar(
+                        buffer,
+                        body_x,
+                        cur_y + 2,
+                        inner_w,
+                        status_tab.telemetry.context.percent as u8,
+                        Style::default().fg(config.palette.teal),
+                        Style::default().fg(config.palette.surface0),
+                    );
+                }
+
+                if cur_y + 3 < bottom_limit {
+                    let cost_line = format!(
+                        "^ 1.0M · v 14.4k   Costo ${:.3}",
+                        status_tab.telemetry.context.cost
+                    );
+                    buffer.set_stringn(
+                        body_x,
+                        cur_y + 3,
+                        cost_line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.yellow),
+                    );
+                }
+            }
+            cur_y += card_h;
+        }
+    }
+
+    // 3. Tarjeta: ~ Proyecto (Sección 3)
+    if config.right_dock_show_state && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(3);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let header = format!(
+            "~ Proyecto · {ws_name} {}d",
+            status_tab.telemetry.project_days
+        );
+        let card_h = if is_col {
+            1
+        } else {
+            3u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                Style::default().fg(config.palette.peach),
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(3),
+            );
+            if !is_col && card_h >= 2 {
+                let body_x = x + 2;
+                render_card_kv(
+                    buffer,
+                    body_x,
+                    cur_y + 1,
+                    inner_w,
+                    "Workspace: ",
+                    ws_name,
+                    key_style,
+                    val_cyan,
+                );
+            }
+            cur_y += card_h;
+        }
+    }
+
+    // 4. Tarjeta: CPAMC / Integraciones (Sección 4)
+    if config.right_dock_show_cpamc && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(4);
+        let badge = if is_col { "[+]" } else { "[-]" };
+
         match config.cpamc_experience {
             crate::config::CpamcExperienceConfig::AutoSwitcher => {
                 let pool_name = context.and_then(|c| c.agent_name).unwrap_or("Gemini");
-                buffer.set_stringn(x + 1, row, format!("⚡ POOL: {pool_name} - [o Esperando]"), max_width as usize, Style::default().fg(config.palette.yellow));
-                row += 1;
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "5 HORAS:   Quedan 5h 0m (0% libre)", max_width as usize, Style::default().fg(config.palette.text));
-                    row += 1;
-                }
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "SEMANAL:   0% 7d 0h", max_width as usize, Style::default().fg(config.palette.subtext0));
-                    row += 1;
-                }
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "Líder: ⚡  i...c | Res: 100%", max_width as usize, Style::default().fg(config.palette.mauve));
-                    row += 1;
-                }
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "🛡 [CENTINELA] - ● En guardia", max_width as usize, Style::default().fg(config.palette.green));
-                    row += 1;
+                let header_title = format!("⚡ POOL: {pool_name} - [o Esperando]");
+                let card_h = if is_col {
+                    1
+                } else {
+                    6u16.min(bottom_limit.saturating_sub(cur_y))
+                };
+                if card_h >= 1 {
+                    draw_card_box(
+                        buffer,
+                        x + 1,
+                        cur_y,
+                        card_w,
+                        card_h,
+                        &header_title,
+                        badge,
+                        card_border_style,
+                        Style::default().fg(config.palette.yellow),
+                        card_badge_style,
+                        hits.as_deref_mut(),
+                        Some(4),
+                    );
+
+                    if !is_col && card_h >= 4 {
+                        let body_x = x + 2;
+                        buffer.set_stringn(
+                            body_x,
+                            cur_y + 1,
+                            "5 HORAS:   Quedan 5h 0m (0% libre)",
+                            inner_w as usize,
+                            val_text,
+                        );
+                        if cur_y + 2 < bottom_limit {
+                            render_mini_bar(
+                                buffer,
+                                body_x,
+                                cur_y + 2,
+                                inner_w,
+                                35,
+                                Style::default().fg(config.palette.teal),
+                                Style::default().fg(config.palette.surface0),
+                            );
+                        }
+                        if cur_y + 3 < bottom_limit {
+                            buffer.set_stringn(
+                                body_x,
+                                cur_y + 3,
+                                "SEMANAL:   0% 7d 0h",
+                                inner_w as usize,
+                                val_dim,
+                            );
+                        }
+                        if cur_y + 4 < bottom_limit {
+                            buffer.set_stringn(
+                                body_x,
+                                cur_y + 4,
+                                "🛡 [CENTINELA] - ● En guardia",
+                                inner_w as usize,
+                                Style::default().fg(config.palette.green),
+                            );
+                        }
+                    }
+                    cur_y += card_h;
                 }
             }
             crate::config::CpamcExperienceConfig::Totopo27 => {
-                buffer.set_stringn(x + 1, row, "• CPAMC / Cuentas", max_width as usize, Style::default().fg(config.palette.accent));
-                row += 1;
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "Cuenta:    activa", max_width as usize, Style::default().fg(config.palette.text));
-                    row += 1;
-                }
-                if row < y + rows {
-                    buffer.set_stringn(x + 1, row, "Cuota 5h:  unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
-                    row += 1;
+                let count = status_tab.telemetry.accounts.len();
+                let header_title = format!("• CPAMC / Cuentas ({count})");
+                let card_h = if is_col {
+                    1
+                } else {
+                    4u16.min(bottom_limit.saturating_sub(cur_y))
+                };
+                if card_h >= 1 {
+                    draw_card_box(
+                        buffer,
+                        x + 1,
+                        cur_y,
+                        card_w,
+                        card_h,
+                        &header_title,
+                        badge,
+                        card_border_style,
+                        card_title_style,
+                        card_badge_style,
+                        hits.as_deref_mut(),
+                        Some(4),
+                    );
+
+                    if !is_col && card_h >= 3 {
+                        let body_x = x + 2;
+                        render_card_kv(
+                            buffer,
+                            body_x,
+                            cur_y + 1,
+                            inner_w,
+                            "Cuenta:    ",
+                            "activa",
+                            key_style,
+                            val_text,
+                        );
+                        render_card_kv(
+                            buffer,
+                            body_x,
+                            cur_y + 2,
+                            inner_w,
+                            "Cuota 5h:  ",
+                            "100% libre",
+                            key_style,
+                            val_cyan,
+                        );
+                    }
+                    cur_y += card_h;
                 }
             }
         }
     }
-    if config.right_dock_show_tools && row < y + rows {
-        buffer.set_stringn(x + 1, row, "• TOOLS    [active]", max_width as usize, Style::default().fg(config.palette.teal));
-        row += 1;
-        if row < y + rows {
-            buffer.set_stringn(x + 1, row, "Calls:     unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
-            row += 1;
+
+    // 5. Tarjeta: SDD Mono-modelo (Sección 5)
+    if cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(5);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let header = format!(
+            "SDD Mono-modelo · {} *",
+            status_tab.telemetry.active_account
+        );
+        let card_h = if is_col {
+            1
+        } else {
+            (status_tab.telemetry.model_quotas.len() as u16 + 2)
+                .min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                Style::default().fg(config.palette.mauve),
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(5),
+            );
+            if !is_col && card_h >= 3 {
+                let body_x = x + 2;
+                for (idx, mq) in status_tab.telemetry.model_quotas.iter().enumerate() {
+                    let row_y = cur_y + 1 + idx as u16;
+                    if row_y >= bottom_limit.saturating_sub(1) {
+                        break;
+                    }
+                    let line = format!(
+                        "• {:<11} ─── {:>5} {}",
+                        mq.model_name, mq.indicator, mq.reset_in
+                    );
+                    buffer.set_stringn(
+                        body_x,
+                        row_y,
+                        line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.teal),
+                    );
+                }
+            }
+            cur_y += card_h;
         }
     }
-    if config.right_dock_show_mcp && row < y + rows {
-        buffer.set_stringn(x + 1, row, "• MCP      [ready]", max_width as usize, Style::default().fg(config.palette.blue));
-        row += 1;
-        if row < y + rows {
-            buffer.set_stringn(x + 1, row, "Servers:   unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+
+    // 6. Tarjeta: Cambios · Git (Sección 6)
+    if config.right_dock_show_git && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(6);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let header = format!(
+            "Cambios · {} por agente",
+            status_tab.telemetry.git.agent_files_changed
+        );
+        let card_h = if is_col {
+            1
+        } else {
+            5u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                card_title_style,
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(6),
+            );
+
+            if !is_col && card_h >= 3 {
+                let body_x = x + 2;
+                let row1 = format!(
+                    "{} * {} mod · ?{}",
+                    branch_name,
+                    status_tab.telemetry.git.modified_count,
+                    status_tab.telemetry.git.untracked_count
+                );
+                buffer.set_stringn(
+                    body_x,
+                    cur_y + 1,
+                    row1,
+                    inner_w as usize,
+                    Style::default().fg(config.palette.peach),
+                );
+
+                if cur_y + 2 < bottom_limit {
+                    let head_line = format!(
+                        "* {} (HEAD -> {})",
+                        status_tab
+                            .telemetry
+                            .git
+                            .head_commit
+                            .as_deref()
+                            .unwrap_or(""),
+                        branch_name
+                    );
+                    buffer.set_stringn(
+                        body_x,
+                        cur_y + 2,
+                        head_line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.blue),
+                    );
+                }
+                if cur_y + 3 < bottom_limit {
+                    let git_val =
+                        if let Some((ahead, behind)) = context.and_then(|c| c.git_ahead_behind) {
+                            format!("+{ahead}/-{behind}")
+                        } else if branch_name == "unavailable" {
+                            "unavailable".to_string()
+                        } else {
+                            "unavailable".to_string()
+                        };
+                    let git_status_text = if git_val == "unavailable" {
+                        "Git:       unavailable".to_string()
+                    } else {
+                        format!(
+                            "git: limpio   ag: {} archivos (+{})",
+                            status_tab.telemetry.git.agent_files_changed,
+                            status_tab.telemetry.git.agent_lines_added
+                        )
+                    };
+                    buffer.set_stringn(
+                        body_x,
+                        cur_y + 3,
+                        git_status_text,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.green),
+                    );
+                }
+            }
+            cur_y += card_h;
         }
+    }
+
+    // 7. Tarjeta: Engram (Sección 7)
+    if config.right_dock_show_engram && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(7);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let header = format!("• ENGRAM: {} ^", status_tab.telemetry.engram.project_name);
+        let card_h = if is_col {
+            1
+        } else {
+            3u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                Style::default().fg(config.palette.peach),
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(7),
+            );
+
+            if !is_col && card_h >= 2 {
+                let body_x = x + 2;
+                let engram_line = format!(
+                    "Local ({})   • En linea · {} ob",
+                    status_tab.telemetry.engram.port,
+                    status_tab.telemetry.engram.observations_count,
+                );
+                buffer.set_stringn(
+                    body_x,
+                    cur_y + 1,
+                    engram_line,
+                    inner_w as usize,
+                    Style::default().fg(config.palette.teal),
+                );
+                if cur_y + 2 < bottom_limit {
+                    let cloud_line = format!("Cloud: {}", status_tab.telemetry.engram.cloud_status);
+                    buffer.set_stringn(body_x, cur_y + 2, cloud_line, inner_w as usize, val_dim);
+                }
+            }
+            cur_y += card_h;
+        }
+    }
+
+    // 8. Tarjeta: Tools (Sección 8)
+    if config.right_dock_show_tools && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(8);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let header = format!(
+            "• TOOLS · {} llamada",
+            status_tab.telemetry.tools.total_calls
+        );
+        let card_h = if is_col {
+            1
+        } else {
+            3u16.min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                Style::default().fg(config.palette.teal),
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(8),
+            );
+
+            if !is_col && card_h >= 2 {
+                let body_x = x + 2;
+                let line = format!(
+                    "@ {} lecturas  @ {} escritur  mem: {}",
+                    status_tab.telemetry.tools.reads,
+                    status_tab.telemetry.tools.writes,
+                    status_tab.telemetry.tools.memory_ops
+                );
+                buffer.set_stringn(
+                    body_x,
+                    cur_y + 1,
+                    line,
+                    inner_w as usize,
+                    Style::default().fg(config.palette.peach),
+                );
+            }
+            cur_y += card_h;
+        }
+    }
+
+    // 9. Tarjeta: MCP (Sección 9)
+    if config.right_dock_show_mcp && cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(9);
+        let badge = if is_col { "[+]" } else { "[-]" };
+        let count = status_tab.telemetry.mcp_servers.len();
+        let header = format!("• MCP · {count} activos");
+        let card_h = if is_col {
+            1
+        } else {
+            (count as u16 + 2).min(bottom_limit.saturating_sub(cur_y))
+        };
+        if card_h >= 1 {
+            draw_card_box(
+                buffer,
+                x + 1,
+                cur_y,
+                card_w,
+                card_h,
+                &header,
+                badge,
+                card_border_style,
+                Style::default().fg(config.palette.blue),
+                card_badge_style,
+                hits.as_deref_mut(),
+                Some(9),
+            );
+
+            if !is_col && card_h >= 3 {
+                let body_x = x + 2;
+                for (idx, srv) in status_tab.telemetry.mcp_servers.iter().enumerate() {
+                    let row_y = cur_y + 1 + idx as u16;
+                    if row_y >= bottom_limit.saturating_sub(1) {
+                        break;
+                    }
+                    let line = format!("• {:<14} {:<10} {:>10}", srv.name, srv.scope, srv.status);
+                    buffer.set_stringn(
+                        body_x,
+                        row_y,
+                        line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.teal),
+                    );
+                }
+            }
+            cur_y += card_h;
+        }
+    }
+
+    // 10. Footer de atajos rápidos de navegación al final si queda espacio
+    if bottom_limit.saturating_sub(cur_y) >= 2 {
+        let footer_y = bottom_limit.saturating_sub(2);
+        buffer.set_stringn(
+            x + 1,
+            footer_y,
+            "1-9: colap · c: todo · d: libre",
+            card_w as usize,
+            val_dim,
+        );
+        buffer.set_stringn(
+            x + 1,
+            footer_y + 1,
+            "s: sync · r: act · q: salir",
+            card_w as usize,
+            val_dim,
+        );
     }
 }
 
@@ -881,8 +1764,17 @@ fn render_files_content(
     } else if let Some(q) = &files_tab.search_query {
         format!("🔍 /{q} [Esc:Limpiar]")
     } else if !files_tab.entries.is_empty() {
-        let hidden_tag = if files_tab.show_hidden { "[.:All]" } else { "[.:NoDot]" };
-        format!("• EXPLORER ({}/{}) [Space=Peek] {}", files_tab.selected_index + 1, files_tab.entries.len(), hidden_tag)
+        let hidden_tag = if files_tab.show_hidden {
+            "[.:All]"
+        } else {
+            "[.:NoDot]"
+        };
+        format!(
+            "• EXPLORER ({}/{}) [Space=Peek] {}",
+            files_tab.selected_index + 1,
+            files_tab.entries.len(),
+            hidden_tag
+        )
     } else if files_tab.cached_root.is_none() {
         "• EXPLORER [Cargando...]".to_string()
     } else {
@@ -898,11 +1790,26 @@ fn render_files_content(
     let indices = files_tab.filtered_indices();
     if indices.is_empty() {
         if files_tab.cached_root.is_none() {
-            buffer.set_string(x + 1, y + 2, "Cargando directorio...", Style::default().fg(config.palette.subtext0));
+            buffer.set_string(
+                x + 1,
+                y + 2,
+                "Cargando directorio...",
+                Style::default().fg(config.palette.subtext0),
+            );
         } else if files_tab.search_query.is_some() {
-            buffer.set_string(x + 1, y + 2, "(no matches)", Style::default().fg(config.palette.subtext0));
+            buffer.set_string(
+                x + 1,
+                y + 2,
+                "(no matches)",
+                Style::default().fg(config.palette.subtext0),
+            );
         } else {
-            buffer.set_string(x + 1, y + 2, "(no files)", Style::default().fg(config.palette.subtext0));
+            buffer.set_string(
+                x + 1,
+                y + 2,
+                "(no files)",
+                Style::default().fg(config.palette.subtext0),
+            );
         }
         return;
     }
@@ -998,7 +1905,12 @@ fn render_changes_content(
         return;
     }
 
-    buffer.set_string(x + 1, y, "• GIT CHANGES", Style::default().fg(config.palette.accent));
+    buffer.set_string(
+        x + 1,
+        y,
+        "• GIT CHANGES",
+        Style::default().fg(config.palette.accent),
+    );
     if let Some(ctx) = context {
         if let Some((ahead, behind)) = ctx.git_ahead_behind {
             buffer.set_string(
@@ -1008,7 +1920,12 @@ fn render_changes_content(
                 Style::default().fg(config.palette.subtext0),
             );
         } else {
-            buffer.set_string(x + 1, y + 2, "Working tree clean", Style::default().fg(config.palette.green));
+            buffer.set_string(
+                x + 1,
+                y + 2,
+                "Working tree clean",
+                Style::default().fg(config.palette.green),
+            );
         }
     }
 }
@@ -1053,12 +1970,20 @@ fn render_quick_peek_modal(
         modal_rect.x + 2,
         modal_rect.y,
         title_text,
-        Style::default().fg(config.palette.accent).bg(config.palette.surface0),
+        Style::default()
+            .fg(config.palette.accent)
+            .bg(config.palette.surface0),
     );
 
     // Contenido del archivo/log
     let content_area_rows = modal_h.saturating_sub(2) as usize;
-    for (idx, line) in peek.lines.iter().skip(peek.scroll).take(content_area_rows).enumerate() {
+    for (idx, line) in peek
+        .lines
+        .iter()
+        .skip(peek.scroll)
+        .take(content_area_rows)
+        .enumerate()
+    {
         let line_y = modal_rect.y + 1 + (idx as u16);
         let display_line = format!("{:3} │ {}", idx + 1 + peek.scroll, line);
         let max_len = (modal_w as usize).saturating_sub(4);
@@ -1085,8 +2010,12 @@ mod tests {
     impl TreeFixture {
         fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
-                "herdr-dock-tree-{}-{}", std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+                "herdr-dock-tree-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
             ));
             std::fs::create_dir(&path).unwrap();
             Self(path)
@@ -1110,11 +2039,20 @@ mod tests {
         }
         let mut dock = RightDockState::default();
         dock.files_tab.refresh_if_needed(&root.0);
-        assert_eq!(dock.files_tab.entries.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(),
-            [".config", "z-dir", ".bashrc", "a.txt"]);
+        assert_eq!(
+            dock.files_tab
+                .entries
+                .iter()
+                .map(|e| e.name.as_str())
+                .collect::<Vec<_>>(),
+            [".config", "z-dir", ".bashrc", "a.txt"]
+        );
         dock.files_tab.set_selected_expanded(true);
         assert!(dock.files_tab.entries[0].is_expanded);
-        assert_eq!(dock.files_tab.entries[1].relative_path, PathBuf::from(".config/nested.txt"));
+        assert_eq!(
+            dock.files_tab.entries[1].relative_path,
+            PathBuf::from(".config/nested.txt")
+        );
         assert_eq!(dock.files_tab.entries[1].depth, 1);
         dock.files_tab.selected_index = 1;
         dock.activate_file_selection();
@@ -1135,13 +2073,17 @@ mod tests {
         let mut files = FilesTab::default();
         files.refresh_if_needed(&root.0);
         files.set_visible_rows(3);
-        for _ in 0..39 { files.select_next(); }
+        for _ in 0..39 {
+            files.select_next();
+        }
         assert_eq!(files.entries.len(), 40);
         assert_eq!(files.selected_index, 39);
         assert_eq!(files.scroll_offset, 37);
         files.select_next();
         assert_eq!(files.selected_index, 39);
-        for _ in 0..40 { files.select_prev(); }
+        for _ in 0..40 {
+            files.select_prev();
+        }
         assert_eq!((files.selected_index, files.scroll_offset), (0, 0));
         let empty = TreeFixture::new();
         files.refresh_if_needed(&empty.0);
@@ -1151,11 +2093,48 @@ mod tests {
     }
 
     #[test]
+    fn status_renders_rounded_card_boxes_and_banner() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 40, 25);
+        let mut buffer = Buffer::empty(area);
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            25,
+            40,
+            &config,
+            None,
+            &mut status_tab,
+            None,
+        );
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains(":: TELAR · GENTLE-AI ::"));
+        assert!(text.contains('╭'));
+        assert!(text.contains('╰'));
+        assert!(text.contains('│'));
+        assert!(text.contains('─'));
+        assert!(text.contains("[-]"));
+    }
+
+    #[test]
     fn status_does_not_show_fabricated_jobs_or_todos() {
         let config = ClientShellConfig::from_config(&crate::config::Config::default());
         let area = Rect::new(0, 0, 50, 10);
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 10, 50, &config, None);
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            10,
+            50,
+            &config,
+            None,
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(!text.contains("Jobs (0 running)"));
         assert!(!text.contains("Todos (100% idle)"));
@@ -1165,16 +2144,31 @@ mod tests {
     #[test]
     fn status_shows_workspace_agent_and_branch_without_guessing_git_state() {
         let config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 12);
+        let area = Rect::new(0, 0, 60, 30);
         let mut buffer = Buffer::empty(area);
         let context = WorkspaceContext {
-            workspace_id: "one", workspace_name: "telar", root_path: Path::new("/"),
-            branch: Some("main"), git_ahead_behind: None, is_preview: false,
+            workspace_id: "one",
+            workspace_name: "telar",
+            root_path: Path::new("/"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
             agent_status: Some(crate::api::schema::AgentStatus::Working),
             agent_name: Some("pi"),
             agent_tokens: None,
         };
-        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("telar"));
         assert!(text.contains("working"));
@@ -1185,24 +2179,49 @@ mod tests {
     #[test]
     fn status_sections_can_be_hidden_independently() {
         let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 12);
+        let area = Rect::new(0, 0, 60, 30);
         let context = WorkspaceContext {
-            workspace_id: "one", workspace_name: "project-one", root_path: Path::new("/"),
-            branch: Some("branch-one"), git_ahead_behind: None, is_preview: false,
+            workspace_id: "one",
+            workspace_name: "project-one",
+            root_path: Path::new("/"),
+            branch: Some("branch-one"),
+            git_ahead_behind: None,
+            is_preview: false,
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
         };
         config.right_dock_show_state = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(!text.contains("project-one"));
         assert!(text.contains("branch-one"));
         config.right_dock_show_state = true;
         config.right_dock_show_git = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("project-one"));
         assert!(!text.contains("branch-one"));
@@ -1211,7 +2230,7 @@ mod tests {
     #[test]
     fn status_renders_engram_and_context_cards_and_honors_visibility() {
         let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 20);
+        let area = Rect::new(0, 0, 60, 45);
         let context = WorkspaceContext {
             workspace_id: "one",
             workspace_name: "test-ws",
@@ -1224,18 +2243,39 @@ mod tests {
             agent_tokens: None,
         };
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 20, 60, &config, Some(&context));
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            45,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("ENGRAM"));
-        assert!(text.contains("Context:"));
+        assert!(text.contains("Context"));
 
         config.right_dock_show_engram = false;
         config.right_dock_show_context = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 20, 60, &config, Some(&context));
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            45,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(!text.contains("ENGRAM"));
-        assert!(!text.contains("Context:"));
+        assert!(!text.contains("Context"));
     }
 
     #[test]
@@ -1256,7 +2296,18 @@ mod tests {
         // AutoSwitcher mode
         config.cpamc_experience = crate::config::CpamcExperienceConfig::AutoSwitcher;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            25,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("POOL: Gemini"));
         assert!(text.contains("CENTINELA"));
@@ -1265,7 +2316,17 @@ mod tests {
         // Totopo27 mode
         config.cpamc_experience = crate::config::CpamcExperienceConfig::Totopo27;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            25,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("CPAMC / Cuentas"));
         assert!(!text.contains("CENTINELA"));
@@ -1273,7 +2334,17 @@ mod tests {
         // Disabled
         config.right_dock_show_cpamc = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            25,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(!text.contains("POOL:"));
         assert!(!text.contains("CPAMC / Cuentas"));
@@ -1295,7 +2366,18 @@ mod tests {
             agent_tokens: None,
         };
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 30, 60, &config, Some(&context));
+        let mut status_tab = StatusTab::default();
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("• TOOLS"));
         assert!(text.contains("• MCP"));
@@ -1303,10 +2385,47 @@ mod tests {
         config.right_dock_show_tools = false;
         config.right_dock_show_mcp = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(&mut buffer, 0, 0, 30, 60, &config, Some(&context));
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            60,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(!text.contains("• TOOLS"));
         assert!(!text.contains("• MCP"));
+    }
+
+    #[test]
+    fn test_status_tab_collapse_toggle_and_shortcuts() {
+        let mut status = StatusTab::default();
+        // Por defecto sección 3 (Proyecto) y 5 (SDD) están colapsadas
+        assert!(status.is_collapsed(3));
+        assert!(status.is_collapsed(5));
+        assert!(!status.is_collapsed(1));
+
+        // Alternar colapso de sección 1 (Estado)
+        status.toggle_section(1);
+        assert!(status.is_collapsed(1));
+        status.toggle_section(1);
+        assert!(!status.is_collapsed(1));
+
+        // Colapsar todo
+        status.collapse_all();
+        for s in 1..=9 {
+            assert!(status.is_collapsed(s));
+        }
+
+        // Expandir todo
+        status.expand_all();
+        for s in 1..=9 {
+            assert!(!status.is_collapsed(s));
+        }
     }
 
     #[test]
@@ -1356,7 +2475,9 @@ mod tests {
         dock.sync_workspace("ws-A");
         dock.files_tab.selected_index = 4;
         dock.files_tab.scroll_offset = 2;
-        dock.files_tab.expanded_dirs.insert(PathBuf::from("src/client"));
+        dock.files_tab
+            .expanded_dirs
+            .insert(PathBuf::from("src/client"));
 
         // Conmutamos a workspace B
         dock.sync_workspace("ws-B");
@@ -1376,14 +2497,27 @@ mod tests {
         // Estado de workspace A debe haber sido restaurado íntegramente
         assert_eq!(dock.files_tab.selected_index, 4);
         assert_eq!(dock.files_tab.scroll_offset, 2);
-        assert!(dock.files_tab.expanded_dirs.contains(&PathBuf::from("src/client")));
-        assert!(!dock.files_tab.expanded_dirs.contains(&PathBuf::from("docs")));
+        assert!(
+            dock.files_tab
+                .expanded_dirs
+                .contains(&PathBuf::from("src/client"))
+        );
+        assert!(
+            !dock
+                .files_tab
+                .expanded_dirs
+                .contains(&PathBuf::from("docs"))
+        );
 
         // Conmutamos de nuevo a workspace B
         dock.sync_workspace("ws-B");
         assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-B"));
         assert_eq!(dock.files_tab.selected_index, 1);
-        assert!(dock.files_tab.expanded_dirs.contains(&PathBuf::from("docs")));
+        assert!(
+            dock.files_tab
+                .expanded_dirs
+                .contains(&PathBuf::from("docs"))
+        );
     }
 
     #[test]
@@ -1477,7 +2611,10 @@ mod tests {
 
     #[test]
     fn test_quick_peek_scrolling() {
-        let mut peek = QuickPeekState::new("sample.rs", vec!["line 1".into(), "line 2".into(), "line 3".into()]);
+        let mut peek = QuickPeekState::new(
+            "sample.rs",
+            vec!["line 1".into(), "line 2".into(), "line 3".into()],
+        );
         assert_eq!(peek.scroll, 0);
 
         peek.scroll_down();
@@ -1554,8 +2691,8 @@ mod tests {
 
     #[test]
     fn test_mouse_clicks_and_scroll_in_right_dock() {
+        use crate::client::shell::state::{ClientShellInput, ClientShellMode, ClientShellState};
         use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-        use crate::client::shell::state::{ClientShellState, ClientShellMode, ClientShellInput};
 
         let config = ClientShellConfig::from_config(&crate::config::Config::default());
         let mut state = ClientShellState::new(config);
@@ -1567,9 +2704,7 @@ mod tests {
             (Rect::new(83, 0, 13, 1), DockTabId::Changes),
         ];
         state.hits.right_dock_split_toggle = Rect::new(100, 0, 10, 1);
-        state.hits.right_dock_file_rows = vec![
-            (Rect::new(61, 2, 48, 1), 0),
-        ];
+        state.hits.right_dock_file_rows = vec![(Rect::new(61, 2, 48, 1), 0)];
 
         // 1. Click on Files tab
         let mut outcome = ClientShellInput::default();
@@ -1595,7 +2730,10 @@ mod tests {
             },
             &mut outcome,
         );
-        assert_eq!(state.right_dock_state.layout_mode, DockLayoutMode::SplitVertical);
+        assert_eq!(
+            state.right_dock_state.layout_mode,
+            DockLayoutMode::SplitVertical
+        );
 
         // 3. Scroll Down
         state.right_dock_state.files_tab.entries = vec![
@@ -1660,9 +2798,18 @@ mod tests {
         }
 
         let full_text = row_contents.join("\n");
-        assert!(full_text.contains('›'), "Debe contener el chevron de carpeta cerrada ›");
+        assert!(
+            full_text.contains('›'),
+            "Debe contener el chevron de carpeta cerrada ›"
+        );
         assert!(full_text.contains("src"), "Debe contener el directorio src");
-        assert!(full_text.contains("{}"), "Debe contener el icono {{}} para package.json");
-        assert!(full_text.contains("TS"), "Debe contener el icono TS para tsconfig.json");
+        assert!(
+            full_text.contains("{}"),
+            "Debe contener el icono {{}} para package.json"
+        );
+        assert!(
+            full_text.contains("TS"),
+            "Debe contener el icono TS para tsconfig.json"
+        );
     }
 }

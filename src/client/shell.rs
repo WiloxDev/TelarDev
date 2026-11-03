@@ -35,6 +35,7 @@ mod scroll;
 mod settings;
 mod state;
 mod surface_patch;
+mod telemetry;
 mod text_editor;
 mod word_selection;
 mod worktrees;

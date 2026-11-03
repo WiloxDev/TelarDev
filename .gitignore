@@ -30,3 +30,4 @@ __pycache__/
 **/.wrangler/
 # Local Pi runtime state
 .atl/
+.codegraph/

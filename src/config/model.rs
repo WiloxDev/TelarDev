@@ -1286,7 +1286,7 @@ impl Default for UiConfig {
             sidebar_max_width: 36,
             sidebar_start_collapsed: false,
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
-            right_dock_width: 32,
+            right_dock_width: 44,
             right_dock_min_width: 24,
             right_dock_max_width: 50,
             right_dock_start_collapsed: false,
