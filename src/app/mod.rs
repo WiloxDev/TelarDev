@@ -272,6 +272,9 @@ fn sibling_theme_names(name: &str) -> (String, String) {
         "monokai-pro-octagon" | "monokai-octagon" | "octagon" => {
             ("monokai-pro-octagon".to_string(), "gruvbox-light".to_string())
         }
+        "gentleman" | "gentle" | "gentleman-sexy" => {
+            ("gentleman".to_string(), "rose-pine-dawn".to_string())
+        }
         _ => (name.to_string(), name.to_string()),
     }
 }

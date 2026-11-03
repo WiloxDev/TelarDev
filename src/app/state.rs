@@ -824,6 +824,31 @@ impl Palette {
         }
     }
 
+    /// Gentleman Programming — Obsidian and hot pink signature aesthetic from Gentleman-Programming and Gentle-Shell.
+    pub fn gentleman() -> Self {
+        Self {
+            accent: Color::Rgb(244, 56, 136),      // #f43888 - hot pink
+            panel_bg: Color::Rgb(16, 10, 15),      // #100a0f - dark obsidian/plum panel
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(40, 18, 30), // #28121e - subtle plum active row
+            selection_bg: Color::Rgb(65, 30, 48),  // #411e30 - navigate selection
+            surface0: Color::Rgb(35, 18, 28),      // #23121c - inactive tabs/cards
+            surface1: Color::Rgb(55, 28, 44),      // #371c2c - hover/borders
+            surface_dim: Color::Rgb(42, 23, 32),   // #2a1720 - separators
+            overlay0: Color::Rgb(140, 115, 128),   // #8c7380 - muted text
+            overlay1: Color::Rgb(190, 160, 175),   // #bea0af - bright muted
+            text: Color::Rgb(246, 239, 243),       // #f6eff3 - pearl soft white
+            subtext0: Color::Rgb(215, 160, 184),   // #d7a0b8 - soft rose labels
+            mauve: Color::Rgb(224, 194, 122),      // #e0c27a - champagne gold
+            green: Color::Rgb(180, 231, 199),      // #b4e7c7 - mint green
+            yellow: Color::Rgb(242, 184, 109),     // #f2b86d - warm amber
+            red: Color::Rgb(255, 113, 143),        // #ff718f - coral error
+            blue: Color::Rgb(169, 199, 238),       // #a9c7ee - powder blue
+            teal: Color::Rgb(0, 229, 255),         // #00e5ff - gentle-shell electric cyan
+            peach: Color::Rgb(255, 177, 221),      // #ffb1dd - pastel pink
+        }
+    }
+
     /// Returns true if this palette represents a light theme based on background luminance.
     pub fn is_light(&self) -> bool {
         match self.panel_bg {
@@ -867,6 +892,7 @@ impl Palette {
             "melange" => Some(Self::melange()),
             "zenbones" => Some(Self::zenbones()),
             "cyberdream" => Some(Self::cyberdream()),
+            "gentleman" => Some(Self::gentleman()),
             _ => None,
         }
     }

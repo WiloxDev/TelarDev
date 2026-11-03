@@ -930,9 +930,14 @@ fn draw_card_box(
         } else {
             right_x
         };
+        let title_fmt = if title.starts_with('◈') || title.starts_with('•') || title.starts_with('⚡') {
+            format!(" {title} ")
+        } else {
+            format!(" ◈ {title} ")
+        };
         let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
         if max_title_len > 0 && !title.is_empty() {
-            buffer.set_stringn(title_x, y, format!(" {title} "), max_title_len, title_style);
+            buffer.set_stringn(title_x, y, title_fmt, max_title_len, title_style);
         }
         if badge_len > 0 && badge_x > title_x {
             buffer.set_stringn(badge_x, y, badge, badge_len as usize, badge_style);
@@ -994,9 +999,14 @@ fn draw_card_box(
         right_x
     };
 
+    let title_fmt = if title.starts_with('◈') || title.starts_with('•') || title.starts_with('⚡') {
+        format!(" {title} ")
+    } else {
+        format!(" ◈ {title} ")
+    };
     let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
     if max_title_len > 0 && !title.is_empty() {
-        buffer.set_stringn(title_x, y, format!(" {title} "), max_title_len, title_style);
+        buffer.set_stringn(title_x, y, title_fmt, max_title_len, title_style);
     }
 
     // Badge a la derecha: "[-]╮"
@@ -1080,11 +1090,17 @@ fn render_status_content(
     let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
     let card_border_style = Style::default().fg(config.palette.surface_dim);
-    let card_title_style = Style::default().fg(config.palette.accent);
-    let card_badge_style = Style::default().fg(config.palette.subtext0);
-    let key_style = Style::default().fg(config.palette.overlay1);
+    let card_title_style = Style::default()
+        .fg(config.palette.mauve)
+        .add_modifier(ratatui::style::Modifier::BOLD);
+    let card_badge_style = Style::default()
+        .fg(config.palette.accent)
+        .add_modifier(ratatui::style::Modifier::BOLD);
+    let key_style = Style::default().fg(config.palette.overlay0);
     let val_accent = Style::default().fg(config.palette.accent);
-    let val_text = Style::default().fg(config.palette.text);
+    let val_text = Style::default()
+        .fg(config.palette.text)
+        .add_modifier(ratatui::style::Modifier::BOLD);
     let val_dim = Style::default().fg(config.palette.subtext0);
     let card_w = width.saturating_sub(2);
     let inner_w = card_w.saturating_sub(2);
@@ -1102,7 +1118,7 @@ fn render_status_content(
         y,
         banner,
         banner_len as usize,
-        Style::default().fg(config.palette.accent),
+        Style::default().fg(config.palette.overlay0),
     );
 
     let mut cur_y = y + 1;
@@ -1118,7 +1134,11 @@ fn render_status_content(
             .map(super::status_text)
             .unwrap_or("unavailable");
 
-        let header_title = format!("Estado · -- {agent_st}");
+        let header_title = if is_col {
+            format!("Estado: {ws_name} ({branch_name}) · {agent_st}")
+        } else {
+            format!("Estado · {agent_st}")
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1188,6 +1208,23 @@ fn render_status_content(
     if config.right_dock_show_context && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(2);
         let badge = if is_col { "[+]" } else { "[-]" };
+        let tokens_val = context
+            .and_then(|c| c.agent_tokens)
+            .and_then(|tokens| {
+                tokens.iter().find_map(|(k, v)| {
+                    if k.contains("token") || k.contains("context") {
+                        Some(v.as_str())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or("179.2k");
+        let header_title = if is_col {
+            format!("Contexto: {tokens_val} ({:.0}%)", status_tab.telemetry.context.percent)
+        } else {
+            "Contexto".to_string()
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1200,7 +1237,7 @@ fn render_status_content(
                 cur_y,
                 card_w,
                 card_h,
-                "Contexto",
+                &header_title,
                 badge,
                 card_border_style,
                 card_title_style,
@@ -1211,39 +1248,40 @@ fn render_status_content(
 
             if !is_col && card_h >= 3 {
                 let body_x = x + 2;
-                let tokens_val = context
-                    .and_then(|c| c.agent_tokens)
-                    .and_then(|tokens| {
-                        tokens.iter().find_map(|(k, v)| {
-                            if k.contains("token") || k.contains("context") {
-                                Some(v.as_str())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .unwrap_or("179.2k");
-
                 let line = format!(
                     "Context:   {tokens_val} / 1.0M  • {}",
                     status_tab.telemetry.context.status_label
                 );
+                let status_style = if status_tab.telemetry.context.percent > 80.0 {
+                    Style::default().fg(config.palette.red)
+                } else if status_tab.telemetry.context.percent > 50.0 {
+                    Style::default().fg(config.palette.yellow)
+                } else {
+                    Style::default().fg(config.palette.green)
+                };
                 buffer.set_stringn(
                     body_x,
                     cur_y + 1,
                     line,
                     inner_w as usize,
-                    Style::default().fg(config.palette.green),
+                    status_style,
                 );
 
                 if cur_y + 2 < bottom_limit {
+                    let bar_color = if status_tab.telemetry.context.percent > 80.0 {
+                        config.palette.red
+                    } else if status_tab.telemetry.context.percent > 50.0 {
+                        config.palette.yellow
+                    } else {
+                        config.palette.teal
+                    };
                     render_mini_bar(
                         buffer,
                         body_x,
                         cur_y + 2,
                         inner_w,
                         status_tab.telemetry.context.percent as u8,
-                        Style::default().fg(config.palette.teal),
+                        Style::default().fg(bar_color),
                         Style::default().fg(config.palette.surface0),
                     );
                 }
@@ -1258,7 +1296,7 @@ fn render_status_content(
                         cur_y + 3,
                         cost_line,
                         inner_w as usize,
-                        Style::default().fg(config.palette.yellow),
+                        val_dim,
                     );
                 }
             }
@@ -1270,10 +1308,11 @@ fn render_status_content(
     if config.right_dock_show_state && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(3);
         let badge = if is_col { "[+]" } else { "[-]" };
-        let header = format!(
-            "~ Proyecto · {ws_name} {}d",
-            status_tab.telemetry.project_days
-        );
+        let header = if is_col {
+            format!("Proyecto: {ws_name} ({}d)", status_tab.telemetry.project_days)
+        } else {
+            format!("Proyecto · {ws_name} {}d", status_tab.telemetry.project_days)
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1289,7 +1328,7 @@ fn render_status_content(
                 &header,
                 badge,
                 card_border_style,
-                Style::default().fg(config.palette.peach),
+                card_title_style,
                 card_badge_style,
                 hits.as_deref_mut(),
                 Some(3),
@@ -1319,7 +1358,11 @@ fn render_status_content(
         match config.cpamc_experience {
             crate::config::CpamcExperienceConfig::AutoSwitcher => {
                 let pool_name = context.and_then(|c| c.agent_name).unwrap_or("Gemini");
-                let header_title = format!("⚡ POOL: {pool_name} - [o Esperando]");
+                let header_title = if is_col {
+                    format!("Pool: {pool_name} · 5h (0% libre)")
+                } else {
+                    format!("Pool: {pool_name} · ○ Esperando")
+                };
                 let card_h = if is_col {
                     1
                 } else {
@@ -1335,7 +1378,7 @@ fn render_status_content(
                         &header_title,
                         badge,
                         card_border_style,
-                        Style::default().fg(config.palette.yellow),
+                        card_title_style,
                         card_badge_style,
                         hits.as_deref_mut(),
                         Some(4),
@@ -1374,7 +1417,7 @@ fn render_status_content(
                             buffer.set_stringn(
                                 body_x,
                                 cur_y + 4,
-                                "🛡 [CENTINELA] - ● En guardia",
+                                "🛡 Centinela · ● En guardia",
                                 inner_w as usize,
                                 Style::default().fg(config.palette.green),
                             );
@@ -1385,7 +1428,11 @@ fn render_status_content(
             }
             crate::config::CpamcExperienceConfig::Totopo27 => {
                 let count = status_tab.telemetry.accounts.len();
-                let header_title = format!("• CPAMC / Cuentas ({count})");
+                let header_title = if is_col {
+                    format!("Cuentas: {count} activas")
+                } else {
+                    format!("CPAMC · {count} cuentas")
+                };
                 let card_h = if is_col {
                     1
                 } else {
@@ -1440,10 +1487,11 @@ fn render_status_content(
     if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(5);
         let badge = if is_col { "[+]" } else { "[-]" };
-        let header = format!(
-            "SDD Mono-modelo · {} *",
-            status_tab.telemetry.active_account
-        );
+        let header = if is_col {
+            format!("SDD: {} · {} mod", status_tab.telemetry.active_account, status_tab.telemetry.model_quotas.len())
+        } else {
+            format!("SDD · {}", status_tab.telemetry.active_account)
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1460,7 +1508,7 @@ fn render_status_content(
                 &header,
                 badge,
                 card_border_style,
-                Style::default().fg(config.palette.mauve),
+                card_title_style,
                 card_badge_style,
                 hits.as_deref_mut(),
                 Some(5),
@@ -1493,10 +1541,11 @@ fn render_status_content(
     if config.right_dock_show_git && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(6);
         let badge = if is_col { "[+]" } else { "[-]" };
-        let header = format!(
-            "Cambios · {} por agente",
-            status_tab.telemetry.git.agent_files_changed
-        );
+        let header = if is_col {
+            format!("Git: limpio ({branch_name}) · ag: {}", status_tab.telemetry.git.agent_files_changed)
+        } else {
+            format!("Git · {} archivos ag", status_tab.telemetry.git.agent_files_changed)
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1531,7 +1580,7 @@ fn render_status_content(
                     cur_y + 1,
                     row1,
                     inner_w as usize,
-                    Style::default().fg(config.palette.peach),
+                    val_text,
                 );
 
                 if cur_y + 2 < bottom_limit {
@@ -1550,7 +1599,7 @@ fn render_status_content(
                         cur_y + 2,
                         head_line,
                         inner_w as usize,
-                        Style::default().fg(config.palette.blue),
+                        val_dim,
                     );
                 }
                 if cur_y + 3 < bottom_limit {
@@ -1588,7 +1637,11 @@ fn render_status_content(
     if config.right_dock_show_engram && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(7);
         let badge = if is_col { "[+]" } else { "[-]" };
-        let header = format!("• ENGRAM: {} ^", status_tab.telemetry.engram.project_name);
+        let header = if is_col {
+            format!("Engram: {} · {} obs", status_tab.telemetry.engram.project_name, status_tab.telemetry.engram.observations_count)
+        } else {
+            format!("Engram · {}", status_tab.telemetry.engram.project_name)
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1604,7 +1657,7 @@ fn render_status_content(
                 &header,
                 badge,
                 card_border_style,
-                Style::default().fg(config.palette.peach),
+                card_title_style,
                 card_badge_style,
                 hits.as_deref_mut(),
                 Some(7),
@@ -1612,18 +1665,28 @@ fn render_status_content(
 
             if !is_col && card_h >= 2 {
                 let body_x = x + 2;
-                let engram_line = format!(
-                    "Local ({})   • En linea · {} ob",
-                    status_tab.telemetry.engram.port,
-                    status_tab.telemetry.engram.observations_count,
-                );
-                buffer.set_stringn(
-                    body_x,
-                    cur_y + 1,
-                    engram_line,
-                    inner_w as usize,
-                    Style::default().fg(config.palette.teal),
-                );
+                let engram_port = format!("Local ({})  ", status_tab.telemetry.engram.port);
+                let port_w = engram_port.chars().count() as u16;
+                buffer.set_stringn(body_x, cur_y + 1, engram_port, port_w as usize, val_text);
+                if body_x + port_w < buffer.area.right() {
+                    buffer.set_stringn(
+                        body_x + port_w,
+                        cur_y + 1,
+                        "• En linea",
+                        10,
+                        Style::default().fg(config.palette.green),
+                    );
+                    let obs_str = format!(" · {} ob", status_tab.telemetry.engram.observations_count);
+                    if body_x + port_w + 10 < buffer.area.right() {
+                        buffer.set_stringn(
+                            body_x + port_w + 10,
+                            cur_y + 1,
+                            obs_str,
+                            inner_w.saturating_sub(port_w + 10) as usize,
+                            val_dim,
+                        );
+                    }
+                }
                 if cur_y + 2 < bottom_limit {
                     let cloud_line = format!("Cloud: {}", status_tab.telemetry.engram.cloud_status);
                     buffer.set_stringn(body_x, cur_y + 2, cloud_line, inner_w as usize, val_dim);
@@ -1637,10 +1700,11 @@ fn render_status_content(
     if config.right_dock_show_tools && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(8);
         let badge = if is_col { "[+]" } else { "[-]" };
-        let header = format!(
-            "• TOOLS · {} llamada",
-            status_tab.telemetry.tools.total_calls
-        );
+        let header = if is_col {
+            format!("Tools: {} llamadas · r:{} w:{}", status_tab.telemetry.tools.total_calls, status_tab.telemetry.tools.reads, status_tab.telemetry.tools.writes)
+        } else {
+            format!("Tools · {} llamadas", status_tab.telemetry.tools.total_calls)
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1656,7 +1720,7 @@ fn render_status_content(
                 &header,
                 badge,
                 card_border_style,
-                Style::default().fg(config.palette.teal),
+                card_title_style,
                 card_badge_style,
                 hits.as_deref_mut(),
                 Some(8),
@@ -1675,7 +1739,7 @@ fn render_status_content(
                     cur_y + 1,
                     line,
                     inner_w as usize,
-                    Style::default().fg(config.palette.peach),
+                    val_dim,
                 );
             }
             cur_y += card_h;
@@ -1687,7 +1751,11 @@ fn render_status_content(
         let is_col = status_tab.is_collapsed(9);
         let badge = if is_col { "[+]" } else { "[-]" };
         let count = status_tab.telemetry.mcp_servers.len();
-        let header = format!("• MCP · {count} activos");
+        let header = if is_col {
+            format!("MCP: {count} activos")
+        } else {
+            format!("MCP · {count} activos")
+        };
         let card_h = if is_col {
             1
         } else {
@@ -1703,7 +1771,7 @@ fn render_status_content(
                 &header,
                 badge,
                 card_border_style,
-                Style::default().fg(config.palette.blue),
+                card_title_style,
                 card_badge_style,
                 hits.as_deref_mut(),
                 Some(9),
@@ -1716,14 +1784,21 @@ fn render_status_content(
                     if row_y >= bottom_limit.saturating_sub(1) {
                         break;
                     }
-                    let line = format!("• {:<14} {:<10} {:>10}", srv.name, srv.scope, srv.status);
-                    buffer.set_stringn(
-                        body_x,
-                        row_y,
-                        line,
-                        inner_w as usize,
-                        Style::default().fg(config.palette.teal),
-                    );
+                    let name_str = format!("• {:<12}", srv.name);
+                    buffer.set_stringn(body_x, row_y, name_str, 14, val_text);
+                    let scope_str = format!("[{}]", srv.scope);
+                    if body_x + 14 < buffer.area.right() {
+                        buffer.set_stringn(body_x + 14, row_y, scope_str, 10, key_style);
+                    }
+                    let status_x = body_x + inner_w.saturating_sub(srv.status.chars().count() as u16);
+                    if status_x > body_x + 20 {
+                        let st_style = if srv.status.contains("linea") || srv.status.contains("línea") || srv.status.contains("online") {
+                            Style::default().fg(config.palette.green)
+                        } else {
+                            val_dim
+                        };
+                        buffer.set_string(status_x, row_y, &srv.status, st_style);
+                    }
                 }
             }
             cur_y += card_h;
@@ -1736,14 +1811,14 @@ fn render_status_content(
         buffer.set_stringn(
             x + 1,
             footer_y,
-            "1-9: colap · c: todo · d: libre",
+            "1-9: colapsar · c: plegar todo",
             card_w as usize,
             val_dim,
         );
         buffer.set_stringn(
             x + 1,
             footer_y + 1,
-            "s: sync · r: act · q: salir",
+            "d: expandir · s: sync · q: salir",
             card_w as usize,
             val_dim,
         );

@@ -7,7 +7,7 @@ pub(super) fn normalized_theme_name(name: &str) -> String {
 
 fn theme_index(name: &str) -> usize {
     let normalized = normalized_theme_name(name);
-    crate::config::THEME_NAMES
+    crate::config::THEME_DISPLAY_ORDER
         .iter()
         .position(|candidate| normalized_theme_name(candidate) == normalized)
         .unwrap_or(0)
@@ -114,7 +114,7 @@ impl ClientShellState {
     fn settings_choice_count(&self) -> usize {
         match self.overlay.as_ref() {
             Some(ClientShellOverlay::Settings(settings)) => match settings.section {
-                ClientSettingsSection::Theme => crate::config::THEME_NAMES.len(),
+                ClientSettingsSection::Theme => crate::config::THEME_DISPLAY_ORDER.len(),
                 ClientSettingsSection::Indicators | ClientSettingsSection::Sound => 2,
                 ClientSettingsSection::Toast => 4,
                 ClientSettingsSection::Typography => crate::config::FONT_CATALOG.len(),
@@ -163,7 +163,7 @@ impl ClientShellState {
         let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_ref() else {
             return;
         };
-        let Some(name) = crate::config::THEME_NAMES.get(settings.selected) else {
+        let Some(name) = crate::config::THEME_DISPLAY_ORDER.get(settings.selected) else {
             return;
         };
         self.config.theme_name = (*name).to_owned();
@@ -222,7 +222,7 @@ impl ClientShellState {
         let selected = settings.selected;
         match section {
             ClientSettingsSection::Theme => {
-                let Some(name) = crate::config::THEME_NAMES.get(selected).copied() else {
+                let Some(name) = crate::config::THEME_DISPLAY_ORDER.get(selected).copied() else {
                     return;
                 };
                 if self.save_settings_edit(crate::config::ConfigEdit::Theme(name), outcome) {

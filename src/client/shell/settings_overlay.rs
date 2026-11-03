@@ -42,13 +42,14 @@ pub(super) fn render_settings_overlay(
     let integration_height = 14u16
         .saturating_add(settings.integrations.len().max(1) as u16)
         .saturating_add(settings.integration_messages.len().min(6) as u16);
-    let height = if settings.section == ClientSettingsSection::Integrations {
-        integration_height.max(22)
-    } else if settings.section == ClientSettingsSection::Typography {
-        24
-    } else {
-        22
+    let available_height = buffer.area.height.saturating_sub(4);
+    let base_height = match settings.section {
+        ClientSettingsSection::Integrations => integration_height.max(22),
+        ClientSettingsSection::Typography => 24.max(available_height.min(32)),
+        ClientSettingsSection::Theme => 22.max(available_height.min(32)),
+        _ => 22,
     };
+    let height = base_height.min(available_height).max(18);
     let width = 90;
     let popup = popup(buffer.area, width, height)?;
     let inner = panel(buffer, popup, palette.accent, palette.panel_bg)?;
@@ -135,9 +136,16 @@ pub(super) fn render_settings_overlay(
     let mut choice_hits = Vec::new();
     match settings.section {
         ClientSettingsSection::Theme => {
+            let total_themes = crate::config::THEME_DISPLAY_ORDER.len();
             let visible = usize::from(content.height);
             let scroll = settings.selected.saturating_sub(visible.saturating_sub(1));
-            for (visible_index, (index, name)) in crate::config::THEME_NAMES
+            let show_scrollbar = total_themes > visible && content.width > 4;
+            let item_width = if show_scrollbar {
+                content.width.saturating_sub(2)
+            } else {
+                content.width
+            };
+            for (visible_index, (index, name)) in crate::config::THEME_DISPLAY_ORDER
                 .iter()
                 .enumerate()
                 .skip(scroll)
@@ -147,7 +155,7 @@ pub(super) fn render_settings_overlay(
                 let rect = Rect::new(
                     content.x,
                     content.y + visible_index as u16,
-                    content.width,
+                    item_width,
                     1,
                 );
                 let display_label = if *name == "terminal" {
@@ -173,6 +181,22 @@ pub(super) fn render_settings_overlay(
                     palette,
                 );
                 choice_hits.push((rect, index));
+            }
+
+            if show_scrollbar {
+                let max_scroll = total_themes.saturating_sub(visible);
+                let metrics = crate::pane::ScrollMetrics {
+                    offset_from_bottom: max_scroll.saturating_sub(scroll),
+                    max_offset_from_bottom: max_scroll,
+                    viewport_rows: visible,
+                };
+                let track = Rect::new(
+                    content.right().saturating_sub(1),
+                    content.y,
+                    1,
+                    content.height,
+                );
+                super::super::scroll::render_list_scrollbar(buffer, track, metrics, palette);
             }
         }
         ClientSettingsSection::Indicators => {

@@ -35,13 +35,17 @@ pub use self::{
     },
     sound::SoundConfig,
     tab_bar::TabBarRightEntryConfig,
-    theme::{parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig, THEME_NAMES},
+    theme::{
+        parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig,
+    },
     typography::{
         detect_host_terminal_from_env, format_terminal_directive, FONT_CATALOG,
     },
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
 
+#[allow(unused_imports)]
+pub use self::theme::{THEME_DISPLAY_ORDER, THEME_NAMES};
 pub(crate) use self::keybinds::parse_key_combo;
 pub(crate) use self::write::{update_file_at, write_edit, ConfigEdit};
 pub(crate) use self::{

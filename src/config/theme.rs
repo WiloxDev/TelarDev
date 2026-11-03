@@ -32,6 +32,42 @@ pub const THEME_NAMES: &[&str] = &[
     "melange",
     "zenbones",
     "cyberdream",
+    "gentleman",
+];
+
+/// Curated order for the Settings UI overlay: signature and modern themes appear first.
+pub const THEME_DISPLAY_ORDER: &[&str] = &[
+    "gentleman",
+    "cyberdream",
+    "tokyo-night",
+    "tokyo-night-day",
+    "rose-pine",
+    "rose-pine-dawn",
+    "dracula",
+    "nord",
+    "gruvbox",
+    "gruvbox-light",
+    "kanagawa",
+    "kanagawa-lotus",
+    "everforest",
+    "everforest-light",
+    "catppuccin",
+    "catppuccin-frappe",
+    "catppuccin-latte",
+    "one-dark",
+    "one-light",
+    "solarized",
+    "solarized-light",
+    "vesper",
+    "ayu-mirage",
+    "poimandres",
+    "oxocarbon",
+    "monokai-pro-octagon",
+    "melange",
+    "zenbones",
+    "nightfly",
+    "github-dark-dimmed",
+    "terminal",
 ];
 
 pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
@@ -66,6 +102,7 @@ pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
         "melange" | "melange-dark" => Some("melange"),
         "zenbones" | "zenbones-dark" => Some("zenbones"),
         "cyberdream" => Some("cyberdream"),
+        "gentleman" | "gentle" | "gentleman-sexy" => Some("gentleman"),
         _ => None,
     }
 }
@@ -246,6 +283,14 @@ pub fn parse_color(s: &str) -> ratatui::style::Color {
 mod tests {
     use super::*;
     use crate::config::Config;
+
+    #[test]
+    fn theme_display_order_matches_all_theme_names() {
+        assert_eq!(THEME_DISPLAY_ORDER.len(), THEME_NAMES.len());
+        for name in THEME_DISPLAY_ORDER {
+            assert!(THEME_NAMES.contains(name), "missing theme in THEME_NAMES: {name}");
+        }
+    }
 
     #[test]
     fn theme_name_parses() {
