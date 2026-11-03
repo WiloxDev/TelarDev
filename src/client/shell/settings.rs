@@ -38,6 +38,7 @@ impl ClientShellState {
             selected: theme_index(&self.config.theme_name),
             original_theme_name: self.config.theme_name.clone(),
             original_palette: self.config.palette.clone(),
+            original_font_id: self.config.font.clone(),
             integrations: Vec::new(),
             integration_messages: Vec::new(),
             loading_integrations: false,
@@ -51,6 +52,12 @@ impl ClientShellState {
             ClientSettingsSection::Indicators => indicator_index(self.config.status_indicators),
             ClientSettingsSection::Sound => usize::from(!self.config.sound_enabled),
             ClientSettingsSection::Toast => toast_index(self.config.toast_delivery),
+            ClientSettingsSection::Typography => self
+                .config
+                .font
+                .as_deref()
+                .and_then(|id| crate::config::FONT_CATALOG.iter().position(|f| f.id == id))
+                .unwrap_or(0),
             ClientSettingsSection::Integrations => 0,
         }
     }
@@ -99,6 +106,7 @@ impl ClientShellState {
                 ClientSettingsSection::Theme => crate::config::THEME_NAMES.len(),
                 ClientSettingsSection::Indicators | ClientSettingsSection::Sound => 2,
                 ClientSettingsSection::Toast => 4,
+                ClientSettingsSection::Typography => crate::config::FONT_CATALOG.len(),
                 ClientSettingsSection::Integrations => settings.integrations.len(),
             },
             _ => 0,
@@ -221,6 +229,19 @@ impl ClientShellState {
                     crate::config::ConfigEdit::ToastDelivery(delivery),
                     outcome,
                 );
+            }
+            ClientSettingsSection::Typography => {
+                if let Some(font) = crate::config::FONT_CATALOG.get(selected) {
+                    self.config.font = Some(font.id.to_string());
+                    self.save_settings_edit(crate::config::ConfigEdit::Font(font.id), outcome);
+                    let host = crate::config::detect_host_terminal_from_env();
+                    let directive = crate::config::format_terminal_directive(host, font);
+                    outcome
+                        .actions
+                        .push(ClientShellAction::ClipboardWrite(directive.into_bytes()));
+                    self.show_copy_feedback(std::time::Instant::now());
+                    outcome.repaint = true;
+                }
             }
             ClientSettingsSection::Integrations => self.install_recommended_integrations(outcome),
         }
@@ -390,6 +411,18 @@ impl ClientShellState {
             self.move_settings_selection(1);
             outcome.repaint = true;
             return true;
+        }
+        if matches!(code, KeyCode::Char('o') | KeyCode::Char('O')) && modifiers.is_empty() {
+            if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_ref() {
+                if settings.section == ClientSettingsSection::Typography {
+                    if let Some(font) = crate::config::FONT_CATALOG.get(settings.selected) {
+                        outcome
+                            .actions
+                            .push(ClientShellAction::OpenSafeWebUrl(font.download_url.to_string()));
+                        return true;
+                    }
+                }
+            }
         }
         if matches!(code, KeyCode::Enter | KeyCode::Char(' ')) && modifiers.is_empty() {
             self.apply_settings_choice(outcome);

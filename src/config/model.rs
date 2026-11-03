@@ -1049,6 +1049,8 @@ pub struct UiConfig {
     pub toast: ToastConfig,
     /// Play sounds when agents change state in background workspaces.
     pub sound: SoundConfig,
+    /// Monospace font preference from the typography catalog (e.g. "geist-mono", "iosevka").
+    pub font: Option<String>,
 }
 
 /// Cursor shape (DECSCUSR) used for the forced IME anchor.
@@ -1281,6 +1283,7 @@ impl Default for UiConfig {
             accent: "cyan".into(),
             toast: ToastConfig::default(),
             sound: SoundConfig::default(),
+            font: None,
         }
     }
 }

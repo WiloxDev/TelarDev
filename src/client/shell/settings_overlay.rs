@@ -44,10 +44,17 @@ pub(super) fn render_settings_overlay(
         .saturating_add(settings.integration_messages.len().min(6) as u16);
     let height = if settings.section == ClientSettingsSection::Integrations {
         integration_height.max(22)
+    } else if settings.section == ClientSettingsSection::Typography {
+        24
     } else {
         22
     };
-    let popup = popup(buffer.area, 76, height)?;
+    let width = if settings.section == ClientSettingsSection::Typography {
+        80
+    } else {
+        76
+    };
+    let popup = popup(buffer.area, width, height)?;
     let inner = panel(buffer, popup, palette.accent, palette.panel_bg)?;
     if inner.width < 20 || inner.height < 8 {
         return None;
@@ -194,6 +201,16 @@ pub(super) fn render_settings_overlay(
                 &mut choice_hits,
             );
         }
+        ClientSettingsSection::Typography => {
+            render_typography(
+                buffer,
+                content,
+                settings.selected,
+                settings.original_font_id.as_deref(),
+                palette,
+                &mut choice_hits,
+            );
+        }
         ClientSettingsSection::Integrations => {
             render_integrations(buffer, content, settings, palette);
         }
@@ -204,18 +221,23 @@ pub(super) fn render_settings_overlay(
         .iter()
         .any(super::super::settings::integration_needs_install);
     let show_primary = settings.section != ClientSettingsSection::Integrations || installable;
-    let labels = if show_primary { vec![10, 12] } else { vec![12] };
+    let primary_label = match settings.section {
+        ClientSettingsSection::Integrations => " ↵ install ",
+        ClientSettingsSection::Typography => " ↵ copy config ",
+        _ => " ↵ apply ",
+    };
+    let labels = if show_primary {
+        vec![display_width(primary_label).max(10), 12]
+    } else {
+        vec![12]
+    };
     let buttons = row(inner, &labels, 2, inner.height.saturating_sub(1));
     let (primary, close) = if show_primary {
         let primary = buttons[0];
         button(
             buffer,
             primary,
-            if settings.section == ClientSettingsSection::Integrations {
-                " ↵ install "
-            } else {
-                " ↵ apply "
-            },
+            primary_label,
             Style::default()
                 .fg(contrast(palette))
                 .bg(palette.accent)
@@ -234,12 +256,17 @@ pub(super) fn render_settings_overlay(
             .bg(palette.surface0)
             .add_modifier(Modifier::BOLD),
     );
+    let help_text = if settings.section == ClientSettingsSection::Typography {
+        " ↑↓ select  o download  tab section"
+    } else {
+        " ↑↓ select  tab section"
+    };
     put_text(
         buffer,
         inner.x,
         inner.bottom().saturating_sub(2),
         inner.width,
-        " ↑↓ select  tab section",
+        help_text,
         Style::default().fg(palette.overlay1).bg(palette.panel_bg),
     );
 
@@ -411,5 +438,211 @@ fn render_integrations(
             " installing…",
             Style::default().fg(palette.overlay1).bg(palette.panel_bg),
         );
+    }
+}
+
+fn render_typography(
+    buffer: &mut Buffer,
+    area: Rect,
+    selected: usize,
+    current_font_id: Option<&str>,
+    palette: &Palette,
+    hits: &mut Vec<(Rect, usize)>,
+) {
+    put_text(
+        buffer,
+        area.x,
+        area.y,
+        area.width,
+        "typography & font preview",
+        Style::default()
+            .fg(palette.text)
+            .bg(palette.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+    put_text(
+        buffer,
+        area.x,
+        area.y + 1,
+        area.width,
+        "curated nerd fonts with verified Seti glyphs for your host terminal",
+        Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+    );
+
+    let body_y = area.y + 3;
+    let body_height = area.bottom().saturating_sub(body_y);
+    if body_height == 0 {
+        return;
+    }
+
+    let left_width = 24.min(area.width.saturating_sub(30));
+    let divider_x = area.x.saturating_add(left_width).saturating_add(1);
+    let right_x = divider_x.saturating_add(2);
+    let right_width = area.right().saturating_sub(right_x);
+
+    let visible = usize::from(body_height);
+    let scroll = selected.saturating_sub(visible.saturating_sub(1));
+    for (visible_index, (index, font)) in crate::config::FONT_CATALOG
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible)
+        .enumerate()
+    {
+        let rect = Rect::new(area.x, body_y + visible_index as u16, left_width, 1);
+        let is_current = current_font_id == Some(font.id);
+        draw_choice(
+            buffer,
+            rect,
+            font.display_name,
+            index == selected,
+            is_current,
+            palette,
+        );
+        hits.push((rect, index));
+    }
+
+    if divider_x < area.right() {
+        for y in body_y..body_y + body_height {
+            put_text(
+                buffer,
+                divider_x,
+                y,
+                1,
+                "│",
+                Style::default().fg(palette.surface0).bg(palette.panel_bg),
+            );
+        }
+    }
+
+    if right_width >= 10 {
+        if let Some(font) = crate::config::FONT_CATALOG.get(selected) {
+            let mut cur_y = body_y;
+
+            put_text(
+                buffer,
+                right_x,
+                cur_y,
+                right_width,
+                font.nerd_font_family,
+                Style::default()
+                    .fg(palette.accent)
+                    .bg(palette.panel_bg)
+                    .add_modifier(Modifier::BOLD),
+            );
+            cur_y += 1;
+
+            if cur_y < area.bottom() {
+                let tags_str = font.style_tags.join(" · ");
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    &format!("{tags_str} ({})", font.license),
+                    Style::default().fg(palette.overlay1).bg(palette.panel_bg),
+                );
+                cur_y += 2;
+            }
+
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    "simulated weights:",
+                    Style::default()
+                        .fg(palette.text)
+                        .bg(palette.panel_bg)
+                        .add_modifier(Modifier::BOLD),
+                );
+                cur_y += 1;
+            }
+
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    " thin : fn main() => 0.42; // minimalist",
+                    Style::default()
+                        .fg(palette.text)
+                        .bg(palette.panel_bg)
+                        .add_modifier(Modifier::DIM),
+                );
+                cur_y += 1;
+            }
+
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    " norm : fn main() => 0.42; // balanced",
+                    Style::default().fg(palette.text).bg(palette.panel_bg),
+                );
+                cur_y += 1;
+            }
+
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    " bold : fn main() => 0.42; // emphasis",
+                    Style::default()
+                        .fg(palette.text)
+                        .bg(palette.panel_bg)
+                        .add_modifier(Modifier::BOLD),
+                );
+                cur_y += 2;
+            }
+
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    "seti icons: {} TS <> >_ ! 🐳 🦀 ⚡ 📦",
+                    Style::default().fg(palette.yellow).bg(palette.panel_bg),
+                );
+                cur_y += 2;
+            }
+
+            let host = crate::config::detect_host_terminal_from_env();
+            let directive = crate::config::format_terminal_directive(host, font);
+            if cur_y < area.bottom() {
+                put_text(
+                    buffer,
+                    right_x,
+                    cur_y,
+                    right_width,
+                    &format!("target: {} ({})", host.display_name(), host.config_location()),
+                    Style::default()
+                        .fg(palette.accent)
+                        .bg(palette.panel_bg)
+                        .add_modifier(Modifier::BOLD),
+                );
+                cur_y += 1;
+            }
+
+            if cur_y < area.bottom() {
+                let rect = Rect::new(right_x, cur_y, right_width.min(directive.len() as u16 + 2), 1);
+                buffer.set_style(rect, Style::default().bg(palette.surface0));
+                put_text(
+                    buffer,
+                    right_x + 1,
+                    cur_y,
+                    right_width.saturating_sub(1),
+                    &directive,
+                    Style::default().fg(palette.green).bg(palette.surface0),
+                );
+            }
+        }
     }
 }

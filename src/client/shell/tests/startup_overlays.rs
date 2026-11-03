@@ -1196,7 +1196,7 @@ fn client_settings_preview_restore_and_endpoint_integrations_are_owned_by_overla
 
     state.open_settings_overlay();
     state.compose(106, 30).expect("settings overlay");
-    for _ in 0..3 {
+    for _ in 0..4 {
         let next = state.handle_input_bytes(b"\t");
         assert!(next.actions.is_empty());
     }
@@ -1313,4 +1313,73 @@ fn client_settings_preview_restore_and_endpoint_integrations_are_owned_by_overla
             ..
         })) if integration_messages == &["installed codex"]
     ));
+}
+
+#[test]
+fn typography_settings_navigation_and_copy_directive() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("shell setup");
+
+    state.open_settings_overlay();
+    let mut outcome = ClientShellInput::default();
+    state.select_settings_section(ClientSettingsSection::Typography, &mut outcome);
+    assert!(outcome.repaint);
+
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+            section: ClientSettingsSection::Typography,
+            selected: 0,
+            ..
+        }))
+    ));
+
+    state.handle_input_bytes(b"j");
+    assert!(matches!(
+        state.overlay,
+        Some(ClientShellOverlay::Settings(ClientSettingsOverlay {
+            section: ClientSettingsSection::Typography,
+            selected: 1,
+            ..
+        }))
+    ));
+
+    let render_result = state.compose(106, 30).expect("settings compose");
+    let text = render_result
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(text.contains("typography & font preview"));
+    assert!(text.contains("Iosevka Nerd Font"));
+    assert!(text.contains("seti icons"));
+    assert!(text.contains("simulated weights"));
+
+    let enter_outcome = state.handle_input_bytes(b"\r");
+    let clipboard_action = enter_outcome
+        .actions
+        .iter()
+        .find(|action| matches!(action, ClientShellAction::ClipboardWrite(_)))
+        .expect("must dispatch clipboard write");
+    let ClientShellAction::ClipboardWrite(bytes) = clipboard_action else {
+        panic!("expected clipboard write");
+    };
+    let directive = String::from_utf8_lossy(bytes);
+    assert!(directive.contains("Iosevka Nerd Font"));
+    assert!(state.copy_feedback.is_some());
+    assert_eq!(state.config.font.as_deref(), Some("iosevka"));
+
+    // Key 'o' should dispatch OpenSafeWebUrl for the selected font
+    let download_outcome = state.handle_input_bytes(b"o");
+    let url_action = download_outcome
+        .actions
+        .iter()
+        .find(|action| matches!(action, ClientShellAction::OpenSafeWebUrl(_)))
+        .expect("must dispatch open safe web url");
+    let ClientShellAction::OpenSafeWebUrl(url) = url_action else {
+        panic!("expected open safe web url");
+    };
+    assert!(url.contains("Iosevka.tar.xz"));
 }
