@@ -5,6 +5,15 @@ pub(crate) enum ConfigEdit<'a> {
     Sound(bool),
     ToastDelivery(super::ToastDelivery),
     Font(&'a str),
+    DockState(bool),
+    DockGit(bool),
+    DockEngram(bool),
+    DockContext(bool),
+    DockCpamc(bool),
+    DockTools(bool),
+    DockMcp(bool),
+    CpamcExperience(super::CpamcExperienceConfig),
+    DockVisible(bool),
 }
 
 impl ConfigEdit<'_> {
@@ -15,6 +24,15 @@ impl ConfigEdit<'_> {
             Self::Sound(_) => "sound setting",
             Self::ToastDelivery(_) => "toast setting",
             Self::Font(_) => "font preference",
+            Self::DockState(_)
+            | Self::DockGit(_)
+            | Self::DockEngram(_)
+            | Self::DockContext(_)
+            | Self::DockCpamc(_)
+            | Self::DockTools(_)
+            | Self::DockMcp(_)
+            | Self::CpamcExperience(_)
+            | Self::DockVisible(_) => "sidebar setting",
         }
     }
 
@@ -47,6 +65,15 @@ impl ConfigEdit<'_> {
             Self::Font(font_id) => {
                 super::upsert_section_value(content, "ui", "font", &format!("\"{font_id}\""))
             }
+            Self::DockState(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_state", enabled),
+            Self::DockGit(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_git", enabled),
+            Self::DockEngram(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_engram", enabled),
+            Self::DockContext(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_context", enabled),
+            Self::DockCpamc(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_cpamc", enabled),
+            Self::DockTools(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_tools", enabled),
+            Self::DockMcp(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_mcp", enabled),
+            Self::CpamcExperience(exp) => super::upsert_section_value(content, "ui", "cpamc_experience", &format!("\"{}\"", exp.as_str())),
+            Self::DockVisible(enabled) => super::upsert_section_bool(content, "ui", "right_dock_enabled", enabled),
         }
     }
 }
@@ -82,6 +109,39 @@ pub(crate) fn write_edit(edit: ConfigEdit<'_>) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dock_sections_default_enabled_and_persist_independently() {
+        let defaults = crate::config::Config::default();
+        assert!(defaults.ui.right_dock_enabled);
+        assert!(defaults.ui.right_dock_show_state);
+        assert!(defaults.ui.right_dock_show_git);
+        assert!(defaults.ui.right_dock_show_engram);
+        assert!(defaults.ui.right_dock_show_context);
+        assert!(defaults.ui.right_dock_show_cpamc);
+        assert!(defaults.ui.right_dock_show_tools);
+        assert!(defaults.ui.right_dock_show_mcp);
+        assert_eq!(defaults.ui.cpamc_experience, crate::config::CpamcExperienceConfig::AutoSwitcher);
+        let text = ConfigEdit::DockState(false).apply("[ui]\nright_dock_show_git = true\n");
+        let text = ConfigEdit::DockGit(false).apply(&text);
+        let text = ConfigEdit::DockEngram(false).apply(&text);
+        let text = ConfigEdit::DockContext(false).apply(&text);
+        let text = ConfigEdit::DockCpamc(false).apply(&text);
+        let text = ConfigEdit::DockTools(false).apply(&text);
+        let text = ConfigEdit::DockMcp(false).apply(&text);
+        let text = ConfigEdit::CpamcExperience(crate::config::CpamcExperienceConfig::Totopo27).apply(&text);
+        let text = ConfigEdit::DockVisible(false).apply(&text);
+        let parsed: crate::config::Config = toml::from_str(&text).unwrap();
+        assert!(!parsed.ui.right_dock_enabled);
+        assert!(!parsed.ui.right_dock_show_state);
+        assert!(!parsed.ui.right_dock_show_git);
+        assert!(!parsed.ui.right_dock_show_engram);
+        assert!(!parsed.ui.right_dock_show_context);
+        assert!(!parsed.ui.right_dock_show_cpamc);
+        assert!(!parsed.ui.right_dock_show_tools);
+        assert!(!parsed.ui.right_dock_show_mcp);
+        assert_eq!(parsed.ui.cpamc_experience, crate::config::CpamcExperienceConfig::Totopo27);
+    }
 
     #[test]
     fn update_file_at_does_not_move_a_leading_bom_into_the_file() {

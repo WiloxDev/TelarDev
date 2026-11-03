@@ -39,6 +39,17 @@ impl ClientShellState {
             original_theme_name: self.config.theme_name.clone(),
             original_palette: self.config.palette.clone(),
             original_font_id: self.config.font.clone(),
+            sidebar_visibility: [
+                self.config.right_dock_enabled,
+                self.config.right_dock_show_state,
+                self.config.right_dock_show_git,
+                self.config.right_dock_show_engram,
+                self.config.right_dock_show_context,
+                self.config.right_dock_show_cpamc,
+                self.config.right_dock_show_tools,
+                self.config.right_dock_show_mcp,
+            ],
+            cpamc_experience: self.config.cpamc_experience,
             integrations: Vec::new(),
             integration_messages: Vec::new(),
             loading_integrations: false,
@@ -58,7 +69,7 @@ impl ClientShellState {
                 .as_deref()
                 .and_then(|id| crate::config::FONT_CATALOG.iter().position(|f| f.id == id))
                 .unwrap_or(0),
-            ClientSettingsSection::Integrations => 0,
+            ClientSettingsSection::Sidebar | ClientSettingsSection::Integrations => 0,
         }
     }
 
@@ -107,6 +118,7 @@ impl ClientShellState {
                 ClientSettingsSection::Indicators | ClientSettingsSection::Sound => 2,
                 ClientSettingsSection::Toast => 4,
                 ClientSettingsSection::Typography => crate::config::FONT_CATALOG.len(),
+                ClientSettingsSection::Sidebar => 9,
                 ClientSettingsSection::Integrations => settings.integrations.len(),
             },
             _ => 0,
@@ -178,13 +190,26 @@ impl ClientShellState {
             return false;
         }
         self.reload_client_config();
-        self.push_endpoint_method_with_kind(
-            crate::api::schema::Method::ServerReloadConfig(
-                crate::api::schema::EmptyParams::default(),
-            ),
-            PendingEndpointKind::ReloadConfig,
-            outcome,
-        );
+        if !matches!(
+            edit,
+            crate::config::ConfigEdit::DockVisible(_)
+                | crate::config::ConfigEdit::DockState(_)
+                | crate::config::ConfigEdit::DockGit(_)
+                | crate::config::ConfigEdit::DockEngram(_)
+                | crate::config::ConfigEdit::DockContext(_)
+                | crate::config::ConfigEdit::DockCpamc(_)
+                | crate::config::ConfigEdit::DockTools(_)
+                | crate::config::ConfigEdit::DockMcp(_)
+                | crate::config::ConfigEdit::CpamcExperience(_)
+        ) {
+            self.push_endpoint_method_with_kind(
+                crate::api::schema::Method::ServerReloadConfig(
+                    crate::api::schema::EmptyParams::default(),
+                ),
+                PendingEndpointKind::ReloadConfig,
+                outcome,
+            );
+        }
         outcome.repaint = true;
         true
     }
@@ -241,6 +266,63 @@ impl ClientShellState {
                         .push(ClientShellAction::ClipboardWrite(directive.into_bytes()));
                     self.show_copy_feedback(std::time::Instant::now());
                     outcome.repaint = true;
+                }
+            }
+            ClientSettingsSection::Sidebar => {
+                if selected < 8 {
+                    let enabled = match selected {
+                        0 => !self.config.right_dock_enabled,
+                        1 => !self.config.right_dock_show_state,
+                        2 => !self.config.right_dock_show_git,
+                        3 => !self.config.right_dock_show_engram,
+                        4 => !self.config.right_dock_show_context,
+                        5 => !self.config.right_dock_show_cpamc,
+                        6 => !self.config.right_dock_show_tools,
+                        7 => !self.config.right_dock_show_mcp,
+                        _ => return,
+                    };
+                    match selected {
+                        0 => self.config.right_dock_enabled = enabled,
+                        1 => self.config.right_dock_show_state = enabled,
+                        2 => self.config.right_dock_show_git = enabled,
+                        3 => self.config.right_dock_show_engram = enabled,
+                        4 => self.config.right_dock_show_context = enabled,
+                        5 => self.config.right_dock_show_cpamc = enabled,
+                        6 => self.config.right_dock_show_tools = enabled,
+                        7 => self.config.right_dock_show_mcp = enabled,
+                        _ => {}
+                    }
+                    let edit = match selected {
+                        0 => crate::config::ConfigEdit::DockVisible(enabled),
+                        1 => crate::config::ConfigEdit::DockState(enabled),
+                        2 => crate::config::ConfigEdit::DockGit(enabled),
+                        3 => crate::config::ConfigEdit::DockEngram(enabled),
+                        4 => crate::config::ConfigEdit::DockContext(enabled),
+                        5 => crate::config::ConfigEdit::DockCpamc(enabled),
+                        6 => crate::config::ConfigEdit::DockTools(enabled),
+                        _ => crate::config::ConfigEdit::DockMcp(enabled),
+                    };
+                    if self.save_settings_edit(edit, outcome) {
+                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut() {
+                            settings.sidebar_visibility[selected] = enabled;
+                        }
+                    }
+                } else if selected == 8 {
+                    let next_exp = match self.config.cpamc_experience {
+                        crate::config::CpamcExperienceConfig::AutoSwitcher => {
+                            crate::config::CpamcExperienceConfig::Totopo27
+                        }
+                        crate::config::CpamcExperienceConfig::Totopo27 => {
+                            crate::config::CpamcExperienceConfig::AutoSwitcher
+                        }
+                    };
+                    self.config.cpamc_experience = next_exp;
+                    let edit = crate::config::ConfigEdit::CpamcExperience(next_exp);
+                    if self.save_settings_edit(edit, outcome) {
+                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut() {
+                            settings.cpamc_experience = next_exp;
+                        }
+                    }
                 }
             }
             ClientSettingsSection::Integrations => self.install_recommended_integrations(outcome),

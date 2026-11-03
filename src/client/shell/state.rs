@@ -22,6 +22,15 @@ pub(crate) struct ClientShellConfig {
     pub(super) right_dock_min_width: u16,
     pub(super) right_dock_max_width: u16,
     pub(super) right_dock_start_collapsed: bool,
+    pub(super) right_dock_enabled: bool,
+    pub(super) right_dock_show_state: bool,
+    pub(super) right_dock_show_git: bool,
+    pub(super) right_dock_show_engram: bool,
+    pub(super) right_dock_show_context: bool,
+    pub(super) right_dock_show_cpamc: bool,
+    pub(super) right_dock_show_tools: bool,
+    pub(super) right_dock_show_mcp: bool,
+    pub(super) cpamc_experience: crate::config::CpamcExperienceConfig,
     pub(super) right_dock_collapsed_mode: crate::config::RightDockCollapsedModeConfig,
     pub(super) mobile_width_threshold: u16,
     pub(super) tab_bar_position: TabBarPositionConfig,
@@ -400,6 +409,7 @@ pub(super) enum ClientSettingsSection {
     Sound,
     Toast,
     Typography,
+    Sidebar,
     Integrations,
 }
 
@@ -411,6 +421,7 @@ impl ClientSettingsSection {
         Self::Toast,
         Self::Typography,
         Self::Integrations,
+        Self::Sidebar,
     ];
 
     pub(super) fn label(self) -> &'static str {
@@ -420,6 +431,7 @@ impl ClientSettingsSection {
             Self::Sound => "sound",
             Self::Toast => "toasts",
             Self::Typography => "typography",
+            Self::Sidebar => "sidebar",
             Self::Integrations => "integrations",
         }
     }
@@ -432,6 +444,8 @@ pub(super) struct ClientSettingsOverlay {
     pub(super) original_theme_name: String,
     pub(super) original_palette: Palette,
     pub(super) original_font_id: Option<String>,
+    pub(super) sidebar_visibility: [bool; 8],
+    pub(super) cpamc_experience: crate::config::CpamcExperienceConfig,
     pub(super) integrations: Vec<crate::api::schema::IntegrationInfo>,
     pub(super) integration_messages: Vec<String>,
     pub(super) loading_integrations: bool,

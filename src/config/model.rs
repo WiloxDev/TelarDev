@@ -143,6 +143,23 @@ pub enum SidebarCollapsedModeConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpamcExperienceConfig {
+    #[default]
+    AutoSwitcher,
+    Totopo27,
+}
+
+impl CpamcExperienceConfig {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AutoSwitcher => "auto_switcher",
+            Self::Totopo27 => "totopo27",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RightDockCollapsedModeConfig {
     #[default]
@@ -986,6 +1003,24 @@ pub struct UiConfig {
     pub right_dock_max_width: u16,
     /// Start with the right dock collapsed. Default: false.
     pub right_dock_start_collapsed: bool,
+    /// Whether the right dock is visible.
+    pub right_dock_enabled: bool,
+    /// Show the State section in the right dock.
+    pub right_dock_show_state: bool,
+    /// Show the Git section in the right dock.
+    pub right_dock_show_git: bool,
+    /// Show the Engram telemetry section in the right dock.
+    pub right_dock_show_engram: bool,
+    /// Show the Context & Tokens section in the right dock.
+    pub right_dock_show_context: bool,
+    /// Show the CPAMC section in the right dock.
+    pub right_dock_show_cpamc: bool,
+    /// Show the Tools section in the right dock.
+    pub right_dock_show_tools: bool,
+    /// Show the MCP servers section in the right dock.
+    pub right_dock_show_mcp: bool,
+    /// Selected experience for the CPAMC section: "auto_switcher" or "totopo27".
+    pub cpamc_experience: CpamcExperienceConfig,
     /// Collapsed right dock presentation: "rail" (3-col icons) or "hidden". Default: rail.
     pub right_dock_collapsed_mode: RightDockCollapsedModeConfig,
     /// Terminal width at or below which Herdr uses the mobile single-column layout. Default: 64.
@@ -1255,6 +1290,15 @@ impl Default for UiConfig {
             right_dock_min_width: 24,
             right_dock_max_width: 50,
             right_dock_start_collapsed: false,
+            right_dock_enabled: true,
+            right_dock_show_state: true,
+            right_dock_show_git: true,
+            right_dock_show_engram: true,
+            right_dock_show_context: true,
+            right_dock_show_cpamc: true,
+            right_dock_show_tools: true,
+            right_dock_show_mcp: true,
+            cpamc_experience: CpamcExperienceConfig::AutoSwitcher,
             right_dock_collapsed_mode: RightDockCollapsedModeConfig::Rail,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,

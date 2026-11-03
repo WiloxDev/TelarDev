@@ -122,6 +122,15 @@ impl ClientShellConfig {
             right_dock_min_width: config.ui.right_dock_min_width,
             right_dock_max_width: config.ui.right_dock_max_width,
             right_dock_start_collapsed: config.ui.right_dock_start_collapsed,
+            right_dock_enabled: config.ui.right_dock_enabled,
+            right_dock_show_state: config.ui.right_dock_show_state,
+            right_dock_show_git: config.ui.right_dock_show_git,
+            right_dock_show_engram: config.ui.right_dock_show_engram,
+            right_dock_show_context: config.ui.right_dock_show_context,
+            right_dock_show_cpamc: config.ui.right_dock_show_cpamc,
+            right_dock_show_tools: config.ui.right_dock_show_tools,
+            right_dock_show_mcp: config.ui.right_dock_show_mcp,
+            cpamc_experience: config.ui.cpamc_experience,
             right_dock_collapsed_mode: config.ui.right_dock_collapsed_mode,
             mobile_width_threshold: config.ui.mobile_width_threshold,
             tab_bar_position: config.ui.tab_bar_position,
@@ -355,6 +364,15 @@ impl ClientShellConfig {
                 self.right_dock_min_width = ui.right_dock_min_width;
                 self.right_dock_max_width = ui.right_dock_max_width;
                 self.right_dock_collapsed_mode = ui.right_dock_collapsed_mode;
+                self.right_dock_enabled = ui.right_dock_enabled;
+                self.right_dock_show_state = ui.right_dock_show_state;
+                self.right_dock_show_git = ui.right_dock_show_git;
+                self.right_dock_show_engram = ui.right_dock_show_engram;
+                self.right_dock_show_context = ui.right_dock_show_context;
+                self.right_dock_show_cpamc = ui.right_dock_show_cpamc;
+                self.right_dock_show_tools = ui.right_dock_show_tools;
+                self.right_dock_show_mcp = ui.right_dock_show_mcp;
+                self.cpamc_experience = ui.cpamc_experience;
                 self.mobile_width_threshold = ui.mobile_width_threshold;
                 self.tab_bar_position = ui.tab_bar_position;
                 self.hide_tab_bar_when_single_tab = ui.hide_tab_bar_when_single_tab;
@@ -428,7 +446,9 @@ impl ClientShellConfig {
             sidebar_width.clamp(min, max)
         };
 
-        let requested_dock_width = if right_dock_collapsed {
+        let requested_dock_width = if !self.right_dock_enabled {
+            0
+        } else if right_dock_collapsed {
             match self.right_dock_collapsed_mode {
                 crate::config::RightDockCollapsedModeConfig::Rail => 3,
                 crate::config::RightDockCollapsedModeConfig::Hidden => 0,
@@ -542,6 +562,15 @@ mod tests {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     use super::*;
+
+    #[test]
+    fn disabled_right_dock_takes_no_space_even_in_rail_mode() {
+        let mut config = Config::default();
+        config.ui.right_dock_enabled = false;
+        let shell = ClientShellConfig::from_config(&config);
+        let layout = shell.layout(180, 40, false, 1, 26, true, 32);
+        assert_eq!(layout.right_dock.width, 0);
+    }
 
     #[test]
     fn live_reload_applies_client_owned_sections() {

@@ -59,6 +59,9 @@ pub struct WorkspaceContext<'a> {
     pub root_path: &'a Path,
     pub branch: Option<&'a str>,
     pub git_ahead_behind: Option<(usize, usize)>,
+    pub agent_status: Option<crate::api::schema::AgentStatus>,
+    pub agent_name: Option<&'a str>,
+    pub agent_tokens: Option<&'a [(String, String)]>,
     pub is_preview: bool,
 }
 
@@ -744,19 +747,9 @@ fn render_status_content(
         return;
     }
 
-    let ws_name = context.map(|c| c.workspace_name).unwrap_or("Local");
+    let ws_name = context.map(|c| c.workspace_name).unwrap_or("unavailable");
     let is_preview = context.map(|c| c.is_preview).unwrap_or(false);
-    let branch_name = if let Some(branch) = context.and_then(|c| c.branch) {
-        branch.to_string()
-    } else if let Some(ctx) = context {
-        if ctx.root_path.join(".git").exists() {
-            "(init)".to_string()
-        } else {
-            "-".to_string()
-        }
-    } else {
-        "-".to_string()
-    };
+    let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
     let (hud_title, title_color) = if is_preview {
         ("• GENTLE HUD [Preview]", config.palette.yellow)
@@ -764,13 +757,104 @@ fn render_status_content(
         ("• GENTLE HUD", config.palette.accent)
     };
 
-    buffer.set_string(x + 1, y, hud_title, Style::default().fg(title_color));
-    buffer.set_string(x + 1, y + 1, format!("Workspace: {ws_name}"), Style::default().fg(config.palette.text));
-    buffer.set_string(x + 1, y + 2, format!("Branch:    {branch_name}"), Style::default().fg(config.palette.mauve));
-
-    if rows >= 7 {
-        buffer.set_string(x + 1, y + 4, "▾ Jobs (0 running)", Style::default().fg(config.palette.subtext0));
-        buffer.set_string(x + 1, y + 5, "▾ Todos (100% idle)", Style::default().fg(config.palette.green));
+    let max_width = width.saturating_sub(2).min(buffer.area.right().saturating_sub(x + 1));
+    buffer.set_stringn(x + 1, y, hud_title, max_width as usize, Style::default().fg(title_color));
+    let mut row = y + 1;
+    if config.right_dock_show_state {
+        let agent_st = context.and_then(|c| c.agent_status).filter(|s| *s != crate::api::schema::AgentStatus::Unknown).map(super::status_text).unwrap_or("unavailable");
+        let agent_display = if let Some(name) = context.and_then(|c| c.agent_name) {
+            format!("{name} ({agent_st})")
+        } else {
+            agent_st.to_string()
+        };
+        buffer.set_stringn(x + 1, row, format!("Workspace: {ws_name}"), max_width as usize, Style::default().fg(config.palette.text));
+        row += 1;
+        buffer.set_stringn(x + 1, row, format!("Agent:     {agent_display}"), max_width as usize, Style::default().fg(config.palette.text));
+        row += 1;
+    }
+    if config.right_dock_show_git && row < y + rows {
+        buffer.set_stringn(x + 1, row, format!("Branch:    {branch_name}"), max_width as usize, Style::default().fg(config.palette.mauve));
+        row += 1;
+        if row < y + rows {
+            buffer.set_stringn(x + 1, row, "Git:       unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+            row += 1;
+        }
+    }
+    if config.right_dock_show_engram && row < y + rows {
+        buffer.set_stringn(x + 1, row, "• ENGRAM   [offline]", max_width as usize, Style::default().fg(config.palette.peach));
+        row += 1;
+        if row < y + rows {
+            buffer.set_stringn(x + 1, row, "Obs:       unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+            row += 1;
+        }
+    }
+    if config.right_dock_show_context && row < y + rows {
+        let tokens_val = context
+            .and_then(|c| c.agent_tokens)
+            .and_then(|tokens| {
+                tokens.iter().find_map(|(k, v)| {
+                    if k.contains("token") || k.contains("context") {
+                        Some(v.as_str())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or("unavailable");
+        buffer.set_stringn(x + 1, row, format!("Context:   {tokens_val}"), max_width as usize, Style::default().fg(config.palette.blue));
+        row += 1;
+    }
+    if config.right_dock_show_cpamc && row < y + rows {
+        match config.cpamc_experience {
+            crate::config::CpamcExperienceConfig::AutoSwitcher => {
+                let pool_name = context.and_then(|c| c.agent_name).unwrap_or("Gemini");
+                buffer.set_stringn(x + 1, row, format!("⚡ POOL: {pool_name} - [o Esperando]"), max_width as usize, Style::default().fg(config.palette.yellow));
+                row += 1;
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "5 HORAS:   Quedan 5h 0m (0% libre)", max_width as usize, Style::default().fg(config.palette.text));
+                    row += 1;
+                }
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "SEMANAL:   0% 7d 0h", max_width as usize, Style::default().fg(config.palette.subtext0));
+                    row += 1;
+                }
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "Líder: ⚡  i...c | Res: 100%", max_width as usize, Style::default().fg(config.palette.mauve));
+                    row += 1;
+                }
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "🛡 [CENTINELA] - ● En guardia", max_width as usize, Style::default().fg(config.palette.green));
+                    row += 1;
+                }
+            }
+            crate::config::CpamcExperienceConfig::Totopo27 => {
+                buffer.set_stringn(x + 1, row, "• CPAMC / Cuentas", max_width as usize, Style::default().fg(config.palette.accent));
+                row += 1;
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "Cuenta:    activa", max_width as usize, Style::default().fg(config.palette.text));
+                    row += 1;
+                }
+                if row < y + rows {
+                    buffer.set_stringn(x + 1, row, "Cuota 5h:  unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+                    row += 1;
+                }
+            }
+        }
+    }
+    if config.right_dock_show_tools && row < y + rows {
+        buffer.set_stringn(x + 1, row, "• TOOLS    [active]", max_width as usize, Style::default().fg(config.palette.teal));
+        row += 1;
+        if row < y + rows {
+            buffer.set_stringn(x + 1, row, "Calls:     unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+            row += 1;
+        }
+    }
+    if config.right_dock_show_mcp && row < y + rows {
+        buffer.set_stringn(x + 1, row, "• MCP      [ready]", max_width as usize, Style::default().fg(config.palette.blue));
+        row += 1;
+        if row < y + rows {
+            buffer.set_stringn(x + 1, row, "Servers:   unavailable", max_width as usize, Style::default().fg(config.palette.subtext0));
+        }
     }
 }
 
@@ -1064,6 +1148,165 @@ mod tests {
         assert!(files.entries.is_empty());
         assert!(files.expanded_dirs.is_empty());
         assert_eq!((files.selected_index, files.scroll_offset), (0, 0));
+    }
+
+    #[test]
+    fn status_does_not_show_fabricated_jobs_or_todos() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 50, 10);
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 10, 50, &config, None);
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("Jobs (0 running)"));
+        assert!(!text.contains("Todos (100% idle)"));
+        assert!(text.contains("unavailable"));
+    }
+
+    #[test]
+    fn status_shows_workspace_agent_and_branch_without_guessing_git_state() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 60, 12);
+        let mut buffer = Buffer::empty(area);
+        let context = WorkspaceContext {
+            workspace_id: "one", workspace_name: "telar", root_path: Path::new("/"),
+            branch: Some("main"), git_ahead_behind: None, is_preview: false,
+            agent_status: Some(crate::api::schema::AgentStatus::Working),
+            agent_name: Some("pi"),
+            agent_tokens: None,
+        };
+        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("telar"));
+        assert!(text.contains("working"));
+        assert!(text.contains("main"));
+        assert!(text.contains("unavailable"));
+    }
+
+    #[test]
+    fn status_sections_can_be_hidden_independently() {
+        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 60, 12);
+        let context = WorkspaceContext {
+            workspace_id: "one", workspace_name: "project-one", root_path: Path::new("/"),
+            branch: Some("branch-one"), git_ahead_behind: None, is_preview: false,
+            agent_status: None,
+            agent_name: None,
+            agent_tokens: None,
+        };
+        config.right_dock_show_state = false;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("project-one"));
+        assert!(text.contains("branch-one"));
+        config.right_dock_show_state = true;
+        config.right_dock_show_git = false;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 12, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("project-one"));
+        assert!(!text.contains("branch-one"));
+    }
+
+    #[test]
+    fn status_renders_engram_and_context_cards_and_honors_visibility() {
+        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 60, 20);
+        let context = WorkspaceContext {
+            workspace_id: "one",
+            workspace_name: "test-ws",
+            root_path: Path::new("/"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: None,
+            agent_name: None,
+            agent_tokens: None,
+        };
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 20, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("ENGRAM"));
+        assert!(text.contains("Context:"));
+
+        config.right_dock_show_engram = false;
+        config.right_dock_show_context = false;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 20, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("ENGRAM"));
+        assert!(!text.contains("Context:"));
+    }
+
+    #[test]
+    fn status_renders_cpamc_experience_variants() {
+        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 60, 25);
+        let context = WorkspaceContext {
+            workspace_id: "one",
+            workspace_name: "test-ws",
+            root_path: Path::new("/"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: None,
+            agent_name: Some("Gemini"),
+            agent_tokens: None,
+        };
+        // AutoSwitcher mode
+        config.cpamc_experience = crate::config::CpamcExperienceConfig::AutoSwitcher;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("POOL: Gemini"));
+        assert!(text.contains("CENTINELA"));
+        assert!(text.contains("5 HORAS"));
+
+        // Totopo27 mode
+        config.cpamc_experience = crate::config::CpamcExperienceConfig::Totopo27;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("CPAMC / Cuentas"));
+        assert!(!text.contains("CENTINELA"));
+
+        // Disabled
+        config.right_dock_show_cpamc = false;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 25, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("POOL:"));
+        assert!(!text.contains("CPAMC / Cuentas"));
+    }
+
+    #[test]
+    fn status_renders_tools_and_mcp_cards_and_honors_visibility() {
+        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 60, 30);
+        let context = WorkspaceContext {
+            workspace_id: "one",
+            workspace_name: "test-ws",
+            root_path: Path::new("/"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: None,
+            agent_name: None,
+            agent_tokens: None,
+        };
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 30, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("• TOOLS"));
+        assert!(text.contains("• MCP"));
+
+        config.right_dock_show_tools = false;
+        config.right_dock_show_mcp = false;
+        let mut buffer = Buffer::empty(area);
+        render_status_content(&mut buffer, 0, 0, 30, 60, &config, Some(&context));
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(!text.contains("• TOOLS"));
+        assert!(!text.contains("• MCP"));
     }
 
     #[test]

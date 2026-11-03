@@ -1383,3 +1383,108 @@ fn typography_settings_navigation_and_copy_directive() {
     };
     assert!(url.contains("Iosevka.tar.xz"));
 }
+
+#[test]
+fn client_settings_sidebar_section_toggles_and_persists() {
+    let temp_dir = std::env::temp_dir().join(format!("herdr-test-config-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let test_config_path = temp_dir.join("config.toml");
+    let _ = std::fs::write(&test_config_path, "[ui]\nright_dock_enabled = true\nright_dock_show_state = true\nright_dock_show_git = true\nright_dock_show_engram = true\nright_dock_show_context = true\nright_dock_show_cpamc = true\ncpamc_experience = \"auto_switcher\"\n");
+    let original_env = std::env::var("HERDR_CONFIG_PATH").ok();
+    std::env::set_var("HERDR_CONFIG_PATH", &test_config_path);
+
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 30).expect("shell setup");
+
+    state.open_settings_overlay();
+    let mut outcome = ClientShellInput::default();
+    state.select_settings_section(ClientSettingsSection::Sidebar, &mut outcome);
+    assert!(outcome.repaint);
+
+    let render_result = state.compose(106, 30).expect("settings compose");
+    let text = render_result
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(text.contains("[x] Right dock"));
+    assert!(text.contains("[x] State"));
+    assert!(text.contains("[x] Git"));
+    assert!(text.contains("[x] Engram"));
+    assert!(text.contains("[x] Context"));
+    assert!(text.contains("[x] CPAMC"));
+    assert!(text.contains("[x] Tools"));
+    assert!(text.contains("[x] MCP"));
+    assert!(text.contains("CPAMC View: < Auto Switcher >"));
+
+    // Toggle option 0: Right dock
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_enabled);
+
+    // Navigate to option 1: State, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_state);
+
+    // Navigate to option 2: Git, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_git);
+
+    // Navigate to option 3: Engram, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_engram);
+
+    // Navigate to option 4: Context, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_context);
+
+    // Navigate to option 5: CPAMC, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_cpamc);
+
+    // Navigate to option 6: Tools, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_tools);
+
+    // Navigate to option 7: MCP, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_mcp);
+
+    // Navigate to option 8: CPAMC Mode, and toggle to Totopo27
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert_eq!(
+        state.config.cpamc_experience,
+        crate::config::CpamcExperienceConfig::Totopo27
+    );
+
+    let updated_render = state.compose(106, 30).expect("settings compose updated");
+    let updated_text = updated_render
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(updated_text.contains("[ ] Right dock"));
+    assert!(updated_text.contains("[ ] State"));
+    assert!(updated_text.contains("[ ] Git"));
+    assert!(updated_text.contains("[ ] Engram"));
+    assert!(updated_text.contains("[ ] Context"));
+    assert!(updated_text.contains("[ ] CPAMC"));
+    assert!(updated_text.contains("[ ] Tools"));
+    assert!(updated_text.contains("[ ] MCP"));
+    assert!(updated_text.contains("CPAMC View: < Totopo27 >"));
+
+    match original_env {
+        Some(val) => std::env::set_var("HERDR_CONFIG_PATH", val),
+        None => std::env::remove_var("HERDR_CONFIG_PATH"),
+    }
+    let _ = std::fs::remove_dir_all(temp_dir);
+}

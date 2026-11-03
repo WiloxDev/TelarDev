@@ -49,11 +49,7 @@ pub(super) fn render_settings_overlay(
     } else {
         22
     };
-    let width = if settings.section == ClientSettingsSection::Typography {
-        80
-    } else {
-        76
-    };
+    let width = 90;
     let popup = popup(buffer.area, width, height)?;
     let inner = panel(buffer, popup, palette.accent, palette.panel_bg)?;
     if inner.width < 20 || inner.height < 8 {
@@ -79,7 +75,10 @@ pub(super) fn render_settings_overlay(
             .any(|integration| integration.state == crate::api::schema::IntegrationState::Outdated);
     let mut tab_x = inner.x;
     let mut tab_hits = Vec::new();
-    for section in ClientSettingsSection::ALL {
+    let selected_index = ClientSettingsSection::ALL.iter().position(|section| *section == settings.section).unwrap_or(0);
+    let total_width: u16 = ClientSettingsSection::ALL.iter().map(|section| display_width(section.label()) + 3).sum();
+    let start = if total_width > inner.width { selected_index } else { 0 };
+    for section in &ClientSettingsSection::ALL[start..] {
         let badge = *section == ClientSettingsSection::Integrations && integration_badge;
         let label = if badge {
             format!(" ● {} ", section.label())
@@ -211,6 +210,50 @@ pub(super) fn render_settings_overlay(
                 &mut choice_hits,
             );
         }
+        ClientSettingsSection::Sidebar => {
+            let labels = [
+                "Right dock",
+                "State",
+                "Git",
+                "Engram",
+                "Context",
+                "CPAMC",
+                "Tools",
+                "MCP",
+            ];
+            for (index, label) in labels.iter().enumerate() {
+                if index >= content.height as usize {
+                    break;
+                }
+                let rect = Rect::new(content.x, content.y + index as u16, content.width, 1);
+                let checked = if settings.sidebar_visibility[index] { "x" } else { " " };
+                draw_choice(
+                    buffer,
+                    rect,
+                    &format!("[{checked}] {label}"),
+                    index == settings.selected,
+                    false,
+                    palette,
+                );
+                choice_hits.push((rect, index));
+            }
+            if labels.len() < content.height as usize {
+                let rect = Rect::new(content.x, content.y + labels.len() as u16, content.width, 1);
+                let mode_str = match settings.cpamc_experience {
+                    crate::config::CpamcExperienceConfig::AutoSwitcher => "Auto Switcher",
+                    crate::config::CpamcExperienceConfig::Totopo27 => "Totopo27",
+                };
+                draw_choice(
+                    buffer,
+                    rect,
+                    &format!("CPAMC View: < {mode_str} >"),
+                    labels.len() == settings.selected,
+                    false,
+                    palette,
+                );
+                choice_hits.push((rect, labels.len()));
+            }
+        }
         ClientSettingsSection::Integrations => {
             render_integrations(buffer, content, settings, palette);
         }
@@ -224,6 +267,7 @@ pub(super) fn render_settings_overlay(
     let primary_label = match settings.section {
         ClientSettingsSection::Integrations => " ↵ install ",
         ClientSettingsSection::Typography => " ↵ copy config ",
+        ClientSettingsSection::Sidebar => " ↵ toggle ",
         _ => " ↵ apply ",
     };
     let labels = if show_primary {

@@ -359,12 +359,18 @@ pub(super) fn render_shell(
         });
         let ws_context = active_ws.map(|ws| {
             let root_str = active_pane_cwd.unwrap_or(&ws.new_workspace_cwd);
+            let focused_agent = snapshot.panes.iter()
+                .find(|pane| pane.workspace_id == ws.workspace_id && pane.focused)
+                .and_then(|pane| snapshot.agents.iter().find(|agent| agent.pane_id == pane.pane_id && agent.workspace_id == ws.workspace_id));
             super::dock::WorkspaceContext {
                 workspace_id: &ws.workspace_id,
                 workspace_name: &ws.label,
                 root_path: std::path::Path::new(root_str),
                 branch: ws.branch.as_deref(),
                 git_ahead_behind: ws.git_ahead_behind,
+                agent_status: focused_agent.map(|agent| agent.agent_status),
+                agent_name: focused_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
+                agent_tokens: focused_agent.map(|a| a.tokens.as_slice()),
                 is_preview,
             }
         });
