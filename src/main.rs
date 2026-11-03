@@ -88,10 +88,10 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # Override individual color tokens on top of the base theme.
 # Accepts: hex (#rrggbb), named colors, rgb(r,g,b), or panel_bg = "reset"
 # [theme.custom]
-# sidebar_bg = "#181825"
+# sidebar_bg = "#181825"  # Left sidebar & right dock background ("reset" matches host terminal)
+# panel_bg = "#181825"    # Floating modals, popups, tab bar, and overlays background
 # active_row_bg = "#1e1e2e"
 # selection_bg = "#313244"
-# panel_bg = "reset"
 # accent = "#f5c2e7"
 # red = "#ff6188"
 # green = "#a6e3a1"

@@ -668,8 +668,8 @@ pub(super) fn render_right_dock(
         dock_state.sync_workspace(ctx.workspace_id);
     }
 
-    // Fondo del dock
-    buffer.set_style(area, Style::default().bg(config.palette.panel_bg));
+    // Fondo del dock sincronizado con el sidebar izquierdo (sidebar_bg)
+    buffer.set_style(area, Style::default().bg(config.palette.sidebar_bg));
 
     // Separador vertical izquierdo
     let separator_x = area.x;
@@ -724,12 +724,21 @@ pub(super) fn render_right_dock(
     let content_x = area.x + 1;
     let tab_y = area.y;
 
+    let tab_text_color = match config.palette.panel_bg {
+        ratatui::style::Color::Reset => config.palette.surface_dim,
+        c => c,
+    };
     let active_style = Style::default()
-        .fg(config.palette.panel_bg)
-        .bg(config.palette.accent);
+        .fg(tab_text_color)
+        .bg(config.palette.accent)
+        .add_modifier(ratatui::style::Modifier::BOLD);
     let inactive_style = Style::default()
         .fg(config.palette.subtext0)
-        .bg(config.palette.surface0);
+        .bg(if config.palette.sidebar_bg == ratatui::style::Color::Reset {
+            config.palette.surface0
+        } else {
+            config.palette.sidebar_bg
+        });
 
     let status_style = if dock_state.active_tab == DockTabId::Status {
         active_style
@@ -1071,10 +1080,10 @@ fn render_status_content(
     let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
     let card_border_style = Style::default().fg(config.palette.surface_dim);
-    let card_title_style = Style::default().fg(config.palette.peach);
+    let card_title_style = Style::default().fg(config.palette.accent);
     let card_badge_style = Style::default().fg(config.palette.subtext0);
-    let key_style = Style::default().fg(config.palette.yellow);
-    let val_cyan = Style::default().fg(config.palette.teal);
+    let key_style = Style::default().fg(config.palette.overlay1);
+    let val_accent = Style::default().fg(config.palette.accent);
     let val_text = Style::default().fg(config.palette.text);
     let val_dim = Style::default().fg(config.palette.subtext0);
     let card_w = width.saturating_sub(2);
@@ -1142,7 +1151,7 @@ fn render_status_content(
                     "Proyecto:  ",
                     ws_name,
                     key_style,
-                    val_cyan,
+                    val_text,
                 );
                 row_offset += 1;
                 if config.right_dock_show_git {
@@ -1167,7 +1176,7 @@ fn render_status_content(
                         "Modelo:    ",
                         &status_tab.telemetry.model_name,
                         key_style,
-                        val_cyan,
+                        val_accent,
                     );
                 }
             }
@@ -1295,7 +1304,7 @@ fn render_status_content(
                     "Workspace: ",
                     ws_name,
                     key_style,
-                    val_cyan,
+                    val_text,
                 );
             }
             cur_y += card_h;
@@ -1418,7 +1427,7 @@ fn render_status_content(
                             "Cuota 5h:  ",
                             "100% libre",
                             key_style,
-                            val_cyan,
+                            val_accent,
                         );
                     }
                     cur_y += card_h;

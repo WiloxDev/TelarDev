@@ -150,10 +150,21 @@ pub(super) fn render_settings_overlay(
                     content.width,
                     1,
                 );
+                let display_label = if *name == "terminal" {
+                    format!("{name} [system]")
+                } else if let Some(p) = Palette::from_name(name) {
+                    if p.is_light() {
+                        format!("{name} [light]")
+                    } else {
+                        format!("{name} [dark]")
+                    }
+                } else {
+                    name.to_string()
+                };
                 draw_choice(
                     buffer,
                     rect,
-                    name,
+                    &display_label,
                     index == settings.selected,
                     super::super::settings::normalized_theme_name(name)
                         == super::super::settings::normalized_theme_name(

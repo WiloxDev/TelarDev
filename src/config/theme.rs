@@ -4,6 +4,7 @@ use tracing::warn;
 pub const THEME_NAMES: &[&str] = &[
     "catppuccin",
     "catppuccin-latte",
+    "catppuccin-frappe",
     "terminal",
     "tokyo-night",
     "tokyo-night-day",
@@ -20,6 +21,17 @@ pub const THEME_NAMES: &[&str] = &[
     "rose-pine",
     "rose-pine-dawn",
     "vesper",
+    "everforest",
+    "everforest-light",
+    "ayu-mirage",
+    "poimandres",
+    "github-dark-dimmed",
+    "nightfly",
+    "oxocarbon",
+    "monokai-pro-octagon",
+    "melange",
+    "zenbones",
+    "cyberdream",
 ];
 
 pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
@@ -42,6 +54,18 @@ pub(crate) fn canonical_theme_name(name: &str) -> Option<&'static str> {
         "rose-pine" | "rosepine" => Some("rose-pine"),
         "rose-pine-dawn" | "rosepine-dawn" | "dawn" => Some("rose-pine-dawn"),
         "vesper" => Some("vesper"),
+        "everforest" | "everforest-dark" => Some("everforest"),
+        "everforest-light" => Some("everforest-light"),
+        "ayu-mirage" | "ayu" => Some("ayu-mirage"),
+        "poimandres" | "pmndrs" => Some("poimandres"),
+        "catppuccin-frappe" | "frappe" => Some("catppuccin-frappe"),
+        "github-dark-dimmed" | "github-dimmed" | "dimmed" => Some("github-dark-dimmed"),
+        "nightfly" => Some("nightfly"),
+        "oxocarbon" | "oxocarbon-dark" => Some("oxocarbon"),
+        "monokai-pro-octagon" | "monokai-octagon" | "octagon" => Some("monokai-pro-octagon"),
+        "melange" | "melange-dark" => Some("melange"),
+        "zenbones" | "zenbones-dark" => Some("zenbones"),
+        "cyberdream" => Some("cyberdream"),
         _ => None,
     }
 }
@@ -256,7 +280,17 @@ light_name = "lattee"
 
     #[test]
     fn theme_name_aliases_are_valid() {
-        for name in ["catppuccin-mocha", "tokyonight", "gruvbox-dark", "dawn"] {
+        for name in [
+            "catppuccin-mocha",
+            "tokyonight",
+            "gruvbox-dark",
+            "dawn",
+            "everforest-dark",
+            "ayu",
+            "pmndrs",
+            "github-dimmed",
+            "monokai-octagon",
+        ] {
             assert!(canonical_theme_name(name).is_some(), "alias: {name}");
         }
     }

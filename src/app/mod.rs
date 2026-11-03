@@ -260,6 +260,18 @@ fn sibling_theme_names(name: &str) -> (String, String) {
         "rose-pine" | "rosepine" | "rose-pine-dawn" | "rosepine-dawn" | "dawn" => {
             ("rose-pine".to_string(), "rose-pine-dawn".to_string())
         }
+        "everforest" | "everforest-dark" | "everforest-light" => {
+            ("everforest".to_string(), "everforest-light".to_string())
+        }
+        "catppuccin-frappe" | "frappe" => {
+            ("catppuccin-frappe".to_string(), "catppuccin-latte".to_string())
+        }
+        "github-dark-dimmed" | "github-dimmed" | "dimmed" => {
+            ("github-dark-dimmed".to_string(), "one-light".to_string())
+        }
+        "monokai-pro-octagon" | "monokai-octagon" | "octagon" => {
+            ("monokai-pro-octagon".to_string(), "gruvbox-light".to_string())
+        }
         _ => (name.to_string(), name.to_string()),
     }
 }
@@ -1461,6 +1473,15 @@ mod tests {
 
     #[test]
     fn theme_auto_switch_uses_sibling_map_and_explicit_appearance() {
+        assert_eq!(
+            sibling_theme_names("everforest"),
+            ("everforest".to_string(), "everforest-light".to_string())
+        );
+        assert_eq!(
+            sibling_theme_names("github-dimmed"),
+            ("github-dark-dimmed".to_string(), "one-light".to_string())
+        );
+
         let mut config = Config::default();
         config.theme.name = Some("tokyo-night".to_string());
         config.theme.auto_switch = true;

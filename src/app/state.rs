@@ -524,6 +524,316 @@ impl Palette {
         }
     }
 
+    /// Everforest Dark (Medium) — natural earthy tones with minimal eye strain.
+    pub fn everforest() -> Self {
+        Self {
+            accent: Color::Rgb(167, 192, 128),
+            panel_bg: Color::Rgb(45, 53, 59),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(58, 68, 74),
+            selection_bg: Color::Rgb(71, 82, 88),
+            surface0: Color::Rgb(61, 72, 77),
+            surface1: Color::Rgb(71, 82, 88),
+            surface_dim: Color::Rgb(35, 42, 46),
+            overlay0: Color::Rgb(122, 132, 120),
+            overlay1: Color::Rgb(133, 146, 137),
+            text: Color::Rgb(211, 198, 170),
+            subtext0: Color::Rgb(157, 169, 160),
+            mauve: Color::Rgb(214, 153, 182),
+            green: Color::Rgb(167, 192, 128),
+            yellow: Color::Rgb(219, 188, 127),
+            red: Color::Rgb(230, 126, 128),
+            blue: Color::Rgb(127, 187, 179),
+            teal: Color::Rgb(131, 192, 146),
+            peach: Color::Rgb(230, 152, 117),
+        }
+    }
+
+    /// Everforest Light (Soft) — warm parchment tones for glare-free daytime work.
+    pub fn everforest_light() -> Self {
+        Self {
+            accent: Color::Rgb(141, 161, 1),
+            panel_bg: Color::Rgb(253, 246, 227),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(239, 235, 212),
+            selection_bg: Color::Rgb(225, 220, 195),
+            surface0: Color::Rgb(239, 235, 212),
+            surface1: Color::Rgb(230, 226, 204),
+            surface_dim: Color::Rgb(239, 235, 212),
+            overlay0: Color::Rgb(166, 176, 160),
+            overlay1: Color::Rgb(130, 145, 129),
+            text: Color::Rgb(92, 106, 114),
+            subtext0: Color::Rgb(112, 128, 119),
+            mauve: Color::Rgb(223, 105, 186),
+            green: Color::Rgb(141, 161, 1),
+            yellow: Color::Rgb(223, 160, 0),
+            red: Color::Rgb(248, 85, 82),
+            blue: Color::Rgb(58, 148, 197),
+            teal: Color::Rgb(53, 167, 124),
+            peach: Color::Rgb(245, 125, 38),
+        }
+    }
+
+    /// Ayu Mirage — twilight slate background with warm pastel accents.
+    pub fn ayu_mirage() -> Self {
+        Self {
+            accent: Color::Rgb(255, 204, 102),
+            panel_bg: Color::Rgb(33, 39, 51),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(42, 50, 65),
+            selection_bg: Color::Rgb(56, 66, 84),
+            surface0: Color::Rgb(39, 45, 56),
+            surface1: Color::Rgb(52, 61, 77),
+            surface_dim: Color::Rgb(28, 33, 43),
+            overlay0: Color::Rgb(92, 103, 115),
+            overlay1: Color::Rgb(112, 122, 140),
+            text: Color::Rgb(204, 202, 194),
+            subtext0: Color::Rgb(149, 157, 166),
+            mauve: Color::Rgb(212, 191, 255),
+            green: Color::Rgb(186, 230, 126),
+            yellow: Color::Rgb(255, 213, 128),
+            red: Color::Rgb(242, 135, 121),
+            blue: Color::Rgb(115, 208, 255),
+            teal: Color::Rgb(149, 230, 203),
+            peach: Color::Rgb(255, 204, 102),
+        }
+    }
+
+    /// Poimandres — peaceful slate dark theme engineered by pmndrs.
+    pub fn poimandres() -> Self {
+        Self {
+            accent: Color::Rgb(93, 228, 199),
+            panel_bg: Color::Rgb(27, 30, 40),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(37, 43, 55),
+            selection_bg: Color::Rgb(48, 55, 70),
+            surface0: Color::Rgb(37, 43, 55),
+            surface1: Color::Rgb(48, 51, 64),
+            surface_dim: Color::Rgb(23, 25, 34),
+            overlay0: Color::Rgb(115, 144, 170),
+            overlay1: Color::Rgb(166, 172, 205),
+            text: Color::Rgb(228, 240, 251),
+            subtext0: Color::Rgb(145, 180, 213),
+            mauve: Color::Rgb(208, 103, 157),
+            green: Color::Rgb(93, 228, 199),
+            yellow: Color::Rgb(255, 250, 194),
+            red: Color::Rgb(208, 103, 157),
+            blue: Color::Rgb(137, 221, 255),
+            teal: Color::Rgb(93, 228, 199),
+            peach: Color::Rgb(250, 227, 176),
+        }
+    }
+
+    /// Catppuccin Frappé — intermediate low-contrast dark Catppuccin flavor.
+    pub fn catppuccin_frappe() -> Self {
+        Self {
+            accent: Color::Rgb(140, 170, 238),
+            panel_bg: Color::Rgb(48, 52, 70),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(62, 68, 90),
+            selection_bg: Color::Rgb(78, 85, 110),
+            surface0: Color::Rgb(65, 69, 89),
+            surface1: Color::Rgb(81, 87, 109),
+            surface_dim: Color::Rgb(35, 38, 52),
+            overlay0: Color::Rgb(115, 121, 148),
+            overlay1: Color::Rgb(131, 139, 167),
+            text: Color::Rgb(198, 208, 245),
+            subtext0: Color::Rgb(165, 173, 206),
+            mauve: Color::Rgb(202, 158, 230),
+            green: Color::Rgb(166, 209, 137),
+            yellow: Color::Rgb(229, 200, 144),
+            red: Color::Rgb(231, 130, 132),
+            blue: Color::Rgb(140, 170, 238),
+            teal: Color::Rgb(129, 200, 190),
+            peach: Color::Rgb(239, 159, 118),
+        }
+    }
+
+    /// GitHub Dark Dimmed — official ergonomic low-contrast dark standard.
+    pub fn github_dark_dimmed() -> Self {
+        Self {
+            accent: Color::Rgb(83, 155, 245),
+            panel_bg: Color::Rgb(34, 39, 46),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(45, 51, 59),
+            selection_bg: Color::Rgb(58, 66, 76),
+            surface0: Color::Rgb(45, 51, 59),
+            surface1: Color::Rgb(55, 62, 71),
+            surface_dim: Color::Rgb(28, 33, 40),
+            overlay0: Color::Rgb(118, 131, 144),
+            overlay1: Color::Rgb(144, 157, 171),
+            text: Color::Rgb(173, 186, 199),
+            subtext0: Color::Rgb(118, 131, 144),
+            mauve: Color::Rgb(176, 131, 240),
+            green: Color::Rgb(87, 171, 90),
+            yellow: Color::Rgb(198, 144, 38),
+            red: Color::Rgb(229, 83, 75),
+            blue: Color::Rgb(83, 155, 245),
+            teal: Color::Rgb(57, 197, 207),
+            peach: Color::Rgb(246, 157, 80),
+        }
+    }
+
+    /// Nightfly — elegant midnight-blue dark theme with calibrated contrast.
+    pub fn nightfly() -> Self {
+        Self {
+            accent: Color::Rgb(130, 170, 255),
+            panel_bg: Color::Rgb(1, 22, 39),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(11, 41, 66),
+            selection_bg: Color::Rgb(29, 59, 83),
+            surface0: Color::Rgb(11, 41, 66),
+            surface1: Color::Rgb(29, 59, 83),
+            surface_dim: Color::Rgb(1, 14, 26),
+            overlay0: Color::Rgb(124, 143, 143),
+            overlay1: Color::Rgb(156, 170, 182),
+            text: Color::Rgb(195, 204, 220),
+            subtext0: Color::Rgb(156, 170, 182),
+            mauve: Color::Rgb(199, 146, 234),
+            green: Color::Rgb(33, 199, 168),
+            yellow: Color::Rgb(236, 196, 141),
+            red: Color::Rgb(255, 88, 116),
+            blue: Color::Rgb(130, 170, 255),
+            teal: Color::Rgb(127, 219, 202),
+            peach: Color::Rgb(247, 140, 108),
+        }
+    }
+
+    /// Oxocarbon Dark — minimalist industrial palette from IBM Carbon.
+    pub fn oxocarbon() -> Self {
+        Self {
+            accent: Color::Rgb(51, 177, 255),
+            panel_bg: Color::Rgb(22, 22, 22),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(38, 38, 38),
+            selection_bg: Color::Rgb(57, 57, 57),
+            surface0: Color::Rgb(38, 38, 38),
+            surface1: Color::Rgb(57, 57, 57),
+            surface_dim: Color::Rgb(18, 18, 18),
+            overlay0: Color::Rgb(82, 82, 82),
+            overlay1: Color::Rgb(221, 225, 230),
+            text: Color::Rgb(255, 255, 255),
+            subtext0: Color::Rgb(242, 244, 248),
+            mauve: Color::Rgb(190, 149, 255),
+            green: Color::Rgb(66, 190, 101),
+            yellow: Color::Rgb(255, 233, 123),
+            red: Color::Rgb(238, 83, 150),
+            blue: Color::Rgb(51, 177, 255),
+            teal: Color::Rgb(61, 219, 217),
+            peach: Color::Rgb(255, 126, 182),
+        }
+    }
+
+    /// Monokai Pro (Octagon) — ergonomic muted evolution of classic Monokai.
+    pub fn monokai_pro_octagon() -> Self {
+        Self {
+            accent: Color::Rgb(255, 216, 102),
+            panel_bg: Color::Rgb(40, 42, 58),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(52, 55, 75),
+            selection_bg: Color::Rgb(68, 72, 96),
+            surface0: Color::Rgb(50, 53, 70),
+            surface1: Color::Rgb(65, 68, 88),
+            surface_dim: Color::Rgb(33, 35, 48),
+            overlay0: Color::Rgb(105, 109, 119),
+            overlay1: Color::Rgb(136, 141, 157),
+            text: Color::Rgb(234, 242, 241),
+            subtext0: Color::Rgb(164, 168, 182),
+            mauve: Color::Rgb(171, 157, 242),
+            green: Color::Rgb(169, 220, 118),
+            yellow: Color::Rgb(255, 216, 102),
+            red: Color::Rgb(255, 97, 136),
+            blue: Color::Rgb(120, 220, 232),
+            teal: Color::Rgb(120, 220, 232),
+            peach: Color::Rgb(252, 152, 103),
+        }
+    }
+
+    /// Melange Dark — warm clay and paper tones based on Munsell color harmonies.
+    pub fn melange() -> Self {
+        Self {
+            accent: Color::Rgb(235, 192, 109),
+            panel_bg: Color::Rgb(41, 37, 34),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(54, 49, 45),
+            selection_bg: Color::Rgb(68, 62, 56),
+            surface0: Color::Rgb(52, 48, 44),
+            surface1: Color::Rgb(72, 65, 58),
+            surface_dim: Color::Rgb(34, 31, 29),
+            overlay0: Color::Rgb(120, 109, 101),
+            overlay1: Color::Rgb(163, 151, 140),
+            text: Color::Rgb(236, 225, 215),
+            subtext0: Color::Rgb(193, 181, 168),
+            mauve: Color::Rgb(207, 155, 194),
+            green: Color::Rgb(133, 182, 149),
+            yellow: Color::Rgb(235, 192, 109),
+            red: Color::Rgb(212, 119, 102),
+            blue: Color::Rgb(123, 150, 149),
+            teal: Color::Rgb(137, 179, 182),
+            peach: Color::Rgb(228, 155, 93),
+        }
+    }
+
+    /// Zenbones Dark — perceptual luminance contrast engineered in CIELAB.
+    pub fn zenbones() -> Self {
+        Self {
+            accent: Color::Rgb(129, 155, 105),
+            panel_bg: Color::Rgb(28, 25, 23),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(40, 37, 35),
+            selection_bg: Color::Rgb(61, 56, 53),
+            surface0: Color::Rgb(40, 37, 35),
+            surface1: Color::Rgb(61, 56, 53),
+            surface_dim: Color::Rgb(22, 20, 18),
+            overlay0: Color::Rgb(104, 97, 92),
+            overlay1: Color::Rgb(136, 128, 121),
+            text: Color::Rgb(220, 213, 203),
+            subtext0: Color::Rgb(159, 152, 145),
+            mauve: Color::Rgb(178, 121, 167),
+            green: Color::Rgb(129, 155, 105),
+            yellow: Color::Rgb(196, 136, 88),
+            red: Color::Rgb(222, 110, 124),
+            blue: Color::Rgb(96, 153, 160),
+            teal: Color::Rgb(102, 165, 173),
+            peach: Color::Rgb(214, 140, 103),
+        }
+    }
+
+    /// Cyberdream — modern high-clarity neo-dark theme with charcoal undertones.
+    pub fn cyberdream() -> Self {
+        Self {
+            accent: Color::Rgb(94, 255, 108),
+            panel_bg: Color::Rgb(22, 24, 26),
+            sidebar_bg: Color::Reset,
+            active_row_bg: Color::Rgb(35, 38, 42),
+            selection_bg: Color::Rgb(48, 53, 62),
+            surface0: Color::Rgb(30, 33, 36),
+            surface1: Color::Rgb(44, 49, 58),
+            surface_dim: Color::Rgb(16, 17, 18),
+            overlay0: Color::Rgb(91, 96, 120),
+            overlay1: Color::Rgb(123, 132, 150),
+            text: Color::Rgb(255, 255, 255),
+            subtext0: Color::Rgb(180, 181, 185),
+            mauve: Color::Rgb(189, 94, 255),
+            green: Color::Rgb(94, 255, 108),
+            yellow: Color::Rgb(241, 255, 94),
+            red: Color::Rgb(255, 110, 94),
+            blue: Color::Rgb(94, 161, 255),
+            teal: Color::Rgb(94, 241, 255),
+            peach: Color::Rgb(255, 189, 94),
+        }
+    }
+
+    /// Returns true if this palette represents a light theme based on background luminance.
+    pub fn is_light(&self) -> bool {
+        match self.panel_bg {
+            Color::Rgb(r, g, b) => {
+                (u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114) >= 128_000
+            }
+            _ => false,
+        }
+    }
+
     /// Resolve a theme by name. Returns None for unknown names.
     pub fn from_name(name: &str) -> Option<Self> {
         match crate::config::canonical_theme_name(name)? {
@@ -545,6 +855,18 @@ impl Palette {
             "rose-pine" => Some(Self::rose_pine()),
             "rose-pine-dawn" => Some(Self::rose_pine_dawn()),
             "vesper" => Some(Self::vesper()),
+            "everforest" => Some(Self::everforest()),
+            "everforest-light" => Some(Self::everforest_light()),
+            "ayu-mirage" => Some(Self::ayu_mirage()),
+            "poimandres" => Some(Self::poimandres()),
+            "catppuccin-frappe" => Some(Self::catppuccin_frappe()),
+            "github-dark-dimmed" => Some(Self::github_dark_dimmed()),
+            "nightfly" => Some(Self::nightfly()),
+            "oxocarbon" => Some(Self::oxocarbon()),
+            "monokai-pro-octagon" => Some(Self::monokai_pro_octagon()),
+            "melange" => Some(Self::melange()),
+            "zenbones" => Some(Self::zenbones()),
+            "cyberdream" => Some(Self::cyberdream()),
             _ => None,
         }
     }
