@@ -36,7 +36,7 @@ impl ClientShellState {
                 self.jump_to_dock_tab(super::dock::DockTabId::Files, outcome);
             }
             crate::input::KeybindMatch::Action(crate::input::KeybindAction::JumpDockChanges) => {
-                self.jump_to_dock_tab(super::dock::DockTabId::Changes, outcome);
+                self.jump_to_dock_tab(super::dock::DockTabId::GitFlow, outcome);
             }
             crate::input::KeybindMatch::Action(action) => {
                 if self.workspace_preview_action_blocked()

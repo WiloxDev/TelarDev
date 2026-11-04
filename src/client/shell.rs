@@ -20,6 +20,7 @@ mod endpoint_sidebar;
 mod endpoints;
 pub(super) use endpoints::*;
 mod global_menu;
+pub(crate) mod git_flow;
 mod graphics;
 mod input;
 mod input_source;

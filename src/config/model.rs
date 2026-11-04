@@ -1019,6 +1019,8 @@ pub struct UiConfig {
     pub right_dock_show_tools: bool,
     /// Show the MCP servers section in the right dock.
     pub right_dock_show_mcp: bool,
+    /// Show the Git Flow live canvas in the right dock.
+    pub right_dock_show_git_flow: bool,
     /// Selected experience for the CPAMC section: "auto_switcher" or "totopo27".
     pub cpamc_experience: CpamcExperienceConfig,
     /// Collapsed right dock presentation: "rail" (3-col icons) or "hidden". Default: rail.
@@ -1298,6 +1300,7 @@ impl Default for UiConfig {
             right_dock_show_cpamc: true,
             right_dock_show_tools: true,
             right_dock_show_mcp: true,
+            right_dock_show_git_flow: true,
             cpamc_experience: CpamcExperienceConfig::AutoSwitcher,
             right_dock_collapsed_mode: RightDockCollapsedModeConfig::Rail,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,

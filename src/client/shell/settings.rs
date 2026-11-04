@@ -48,6 +48,7 @@ impl ClientShellState {
                 self.config.right_dock_show_cpamc,
                 self.config.right_dock_show_tools,
                 self.config.right_dock_show_mcp,
+                self.config.right_dock_show_git_flow,
             ],
             cpamc_experience: self.config.cpamc_experience,
             integrations: Vec::new(),
@@ -269,7 +270,7 @@ impl ClientShellState {
                 }
             }
             ClientSettingsSection::Sidebar => {
-                if selected < 8 {
+                if selected < 9 {
                     let enabled = match selected {
                         0 => !self.config.right_dock_enabled,
                         1 => !self.config.right_dock_show_state,
@@ -279,6 +280,7 @@ impl ClientShellState {
                         5 => !self.config.right_dock_show_cpamc,
                         6 => !self.config.right_dock_show_tools,
                         7 => !self.config.right_dock_show_mcp,
+                        8 => !self.config.right_dock_show_git_flow,
                         _ => return,
                     };
                     match selected {
@@ -290,6 +292,7 @@ impl ClientShellState {
                         5 => self.config.right_dock_show_cpamc = enabled,
                         6 => self.config.right_dock_show_tools = enabled,
                         7 => self.config.right_dock_show_mcp = enabled,
+                        8 => self.config.right_dock_show_git_flow = enabled,
                         _ => {}
                     }
                     let edit = match selected {
@@ -300,14 +303,15 @@ impl ClientShellState {
                         4 => crate::config::ConfigEdit::DockContext(enabled),
                         5 => crate::config::ConfigEdit::DockCpamc(enabled),
                         6 => crate::config::ConfigEdit::DockTools(enabled),
-                        _ => crate::config::ConfigEdit::DockMcp(enabled),
+                        7 => crate::config::ConfigEdit::DockMcp(enabled),
+                        _ => crate::config::ConfigEdit::DockGitFlow(enabled),
                     };
                     if self.save_settings_edit(edit, outcome) {
                         if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut() {
                             settings.sidebar_visibility[selected] = enabled;
                         }
                     }
-                } else if selected == 8 {
+                } else if selected == 9 {
                     let next_exp = match self.config.cpamc_experience {
                         crate::config::CpamcExperienceConfig::AutoSwitcher => {
                             crate::config::CpamcExperienceConfig::Totopo27

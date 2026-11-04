@@ -829,11 +829,17 @@ impl ClientShellState {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.select_next();
                             outcome.repaint = true;
+                        } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                            self.right_dock_state.git_flow_tab.canvas.scroll_down(30);
+                            outcome.repaint = true;
                         }
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.select_prev();
+                            outcome.repaint = true;
+                        } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                            self.right_dock_state.git_flow_tab.canvas.scroll_up();
                             outcome.repaint = true;
                         }
                     }

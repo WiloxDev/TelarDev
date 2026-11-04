@@ -1937,6 +1937,9 @@ impl ClientShellState {
                 } else if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                     self.right_dock_state.files_tab.scroll_up();
                     outcome.repaint = true;
+                } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                    self.right_dock_state.git_flow_tab.canvas.scroll_up();
+                    outcome.repaint = true;
                 }
             }
             MouseEventKind::ScrollDown if super::contains(self.hits.right_dock_area, point) => {
@@ -1945,6 +1948,9 @@ impl ClientShellState {
                     outcome.repaint = true;
                 } else if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                     self.right_dock_state.files_tab.scroll_down();
+                    outcome.repaint = true;
+                } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                    self.right_dock_state.git_flow_tab.canvas.scroll_down(30);
                     outcome.repaint = true;
                 }
             }

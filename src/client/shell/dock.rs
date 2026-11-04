@@ -14,8 +14,12 @@ pub enum DockTabId {
     #[default]
     Status,
     Files,
-    Changes,
+    GitFlow,
 }
+
+// Backward compatibility alias for deprecated Changes tab identifier.
+#[allow(dead_code, non_upper_case_globals)]
+pub const Changes: DockTabId = DockTabId::GitFlow;
 
 #[allow(dead_code)]
 impl DockTabId {
@@ -23,7 +27,7 @@ impl DockTabId {
         match self {
             Self::Status => "Status",
             Self::Files => "Files",
-            Self::Changes => "Changes",
+            Self::GitFlow => "Git Flow",
         }
     }
 
@@ -31,23 +35,23 @@ impl DockTabId {
         match self {
             Self::Status => "⚡",
             Self::Files => "📁",
-            Self::Changes => "±",
+            Self::GitFlow => "⎇",
         }
     }
 
     pub fn next(self) -> Self {
         match self {
             Self::Status => Self::Files,
-            Self::Files => Self::Changes,
-            Self::Changes => Self::Status,
+            Self::Files => Self::GitFlow,
+            Self::GitFlow => Self::Status,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Status => Self::Changes,
+            Self::Status => Self::GitFlow,
             Self::Files => Self::Status,
-            Self::Changes => Self::Files,
+            Self::GitFlow => Self::Files,
         }
     }
 }
@@ -534,7 +538,55 @@ pub struct ChangesTab {
 
 impl DockTab for ChangesTab {
     fn id(&self) -> DockTabId {
-        DockTabId::Changes
+        DockTabId::GitFlow
+    }
+    fn is_dirty(&self) -> bool {
+        self.is_dirty
+    }
+    fn mark_dirty(&mut self) {
+        self.is_dirty = true;
+    }
+    fn mark_clean(&mut self) {
+        self.is_dirty = false;
+    }
+    fn hibernate(&mut self) {}
+}
+
+/// Pestaña 3: Git Flow (flujo visual continuo reactivo de Git y GitHub)
+#[derive(Debug, Default)]
+pub struct GitFlowTab {
+    pub canvas: super::git_flow::GitFlowCanvasSnapshot,
+    pub is_dirty: bool,
+    pub last_branch: Option<String>,
+    pub ahead_behind: Option<(usize, usize)>,
+    pub cached_root: Option<PathBuf>,
+}
+
+impl GitFlowTab {
+    pub fn refresh_if_needed(
+        &mut self,
+        root: &Path,
+        branch: Option<&str>,
+        ahead_behind: Option<(usize, usize)>,
+    ) {
+        if !self.is_dirty
+            && self.cached_root.as_deref() == Some(root)
+            && self.last_branch.as_deref() == branch
+        {
+            return;
+        }
+
+        self.cached_root = Some(root.to_path_buf());
+        self.last_branch = branch.map(|s| s.to_string());
+        self.ahead_behind = ahead_behind;
+        self.canvas = super::telemetry::build_live_git_flow_snapshot(root, branch, ahead_behind);
+        self.is_dirty = false;
+    }
+}
+
+impl DockTab for GitFlowTab {
+    fn id(&self) -> DockTabId {
+        DockTabId::GitFlow
     }
     fn is_dirty(&self) -> bool {
         self.is_dirty
@@ -570,6 +622,7 @@ pub struct WorkspaceDockState {
     pub status_tab: StatusTab,
     pub files_tab: FilesTab,
     pub changes_tab: ChangesTab,
+    pub git_flow_tab: GitFlowTab,
 }
 
 /// Estado global del Right Dock persistido en ClientShellState
@@ -580,6 +633,7 @@ pub struct RightDockState {
     pub status_tab: StatusTab,
     pub files_tab: FilesTab,
     pub changes_tab: ChangesTab,
+    pub git_flow_tab: GitFlowTab,
     pub workspace_cache: std::collections::HashMap<String, WorkspaceDockState>,
     pub last_workspace_id: Option<String>,
     pub quick_peek: Option<QuickPeekState>,
@@ -592,14 +646,20 @@ impl RightDockState {
             match self.active_tab {
                 DockTabId::Status => self.status_tab.hibernate(),
                 DockTabId::Files => self.files_tab.hibernate(),
-                DockTabId::Changes => self.changes_tab.hibernate(),
+                DockTabId::GitFlow => {
+                    self.git_flow_tab.hibernate();
+                    self.changes_tab.hibernate();
+                }
             }
             self.active_tab = tab;
             // Marcar como dirty la nueva para refrescar perezosamente
             match self.active_tab {
                 DockTabId::Status => self.status_tab.mark_dirty(),
                 DockTabId::Files => self.files_tab.mark_dirty(),
-                DockTabId::Changes => self.changes_tab.mark_dirty(),
+                DockTabId::GitFlow => {
+                    self.git_flow_tab.mark_dirty();
+                    self.changes_tab.mark_dirty();
+                }
             }
         }
     }
@@ -613,6 +673,7 @@ impl RightDockState {
                     status_tab: std::mem::take(&mut self.status_tab),
                     files_tab: std::mem::take(&mut self.files_tab),
                     changes_tab: std::mem::take(&mut self.changes_tab),
+                    git_flow_tab: std::mem::take(&mut self.git_flow_tab),
                 };
                 self.workspace_cache.insert(old_id, old_state);
             }
@@ -623,16 +684,20 @@ impl RightDockState {
                 restored.status_tab.mark_dirty();
                 restored.files_tab.mark_dirty();
                 restored.changes_tab.mark_dirty();
+                restored.git_flow_tab.mark_dirty();
                 self.status_tab = restored.status_tab;
                 self.files_tab = restored.files_tab;
                 self.changes_tab = restored.changes_tab;
+                self.git_flow_tab = restored.git_flow_tab;
             } else {
                 self.status_tab = StatusTab::default();
                 self.files_tab = FilesTab::default();
                 self.changes_tab = ChangesTab::default();
+                self.git_flow_tab = GitFlowTab::default();
                 self.status_tab.mark_dirty();
                 self.files_tab.mark_dirty();
                 self.changes_tab.mark_dirty();
+                self.git_flow_tab.mark_dirty();
             }
 
             self.last_workspace_id = Some(current_workspace_id.to_string());
@@ -712,7 +777,7 @@ pub(super) fn render_right_dock(
             } else {
                 config.palette.subtext0
             };
-            let changes_color = if active == DockTabId::Changes {
+            let git_flow_color = if active == DockTabId::GitFlow {
                 config.palette.accent
             } else {
                 config.palette.subtext0
@@ -729,9 +794,9 @@ pub(super) fn render_right_dock(
                     .push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Files));
             }
             if area.height >= 6 {
-                buffer.set_string(icon_x, area.y + 5, "±", Style::default().fg(changes_color));
+                buffer.set_string(icon_x, area.y + 5, "⎇", Style::default().fg(git_flow_color));
                 hits.right_dock_tabs
-                    .push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::Changes));
+                    .push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::GitFlow));
             }
         }
         return;
@@ -767,7 +832,7 @@ pub(super) fn render_right_dock(
     } else {
         inactive_style
     };
-    let changes_style = if dock_state.active_tab == DockTabId::Changes {
+    let git_flow_style = if dock_state.active_tab == DockTabId::GitFlow {
         active_style
     } else {
         inactive_style
@@ -783,9 +848,9 @@ pub(super) fn render_right_dock(
             .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
     }
     if content_x + 22 < area.right() {
-        buffer.set_string(content_x + 22, tab_y, " ± Changes ", changes_style);
+        buffer.set_string(content_x + 22, tab_y, " ⎇ Git Flow ", git_flow_style);
         hits.right_dock_tabs
-            .push((Rect::new(content_x + 22, tab_y, 13, 1), DockTabId::Changes));
+            .push((Rect::new(content_x + 22, tab_y, 14, 1), DockTabId::GitFlow));
     }
 
     // Indicador Split View en el extremo derecho del header (Punto 5)
@@ -893,8 +958,15 @@ pub(super) fn render_right_dock(
                     hits,
                 );
             }
-            DockTabId::Changes => {
-                render_changes_content(
+            DockTabId::GitFlow => {
+                if let Some(ctx) = context {
+                    dock_state.git_flow_tab.refresh_if_needed(
+                        ctx.root_path,
+                        ctx.branch,
+                        ctx.git_ahead_behind,
+                    );
+                }
+                render_git_flow_content(
                     buffer,
                     content_x,
                     body_y,
@@ -902,6 +974,7 @@ pub(super) fn render_right_dock(
                     area.width,
                     config,
                     context,
+                    &mut dock_state.git_flow_tab,
                 );
             }
         }
@@ -1147,7 +1220,7 @@ fn render_status_content(
     let mut cur_y = y + 1;
     let bottom_limit = y + rows;
 
-    // 1. Tarjeta: Estado (Workspace, Agent, Modelo, Mem) (Sección 1)
+    // 1. Tarjeta: Status (Workspace, Agent, Modelo, Mem, Engram, MCP) (Sección 1)
     if config.right_dock_show_state && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(1);
         let badge = if is_col { "[+]" } else { "[-]" };
@@ -1158,14 +1231,20 @@ fn render_status_content(
             .unwrap_or("unavailable");
 
         let header_title = if is_col {
-            format!("Estado: {ws_name} ({branch_name}) · {agent_st}")
+            if config.right_dock_show_git {
+                format!("Status: {ws_name} ({branch_name}) · {agent_st}")
+            } else {
+                format!("Status: {ws_name} · {agent_st}")
+            }
+        } else if agent_st != "unavailable" && agent_st != "idle" {
+            format!("Status · {agent_st}")
         } else {
-            format!("Estado · {agent_st}")
+            "Status".to_string()
         };
         let card_h = if is_col {
             1
         } else {
-            5u16.min(bottom_limit.saturating_sub(cur_y))
+            7u16.min(bottom_limit.saturating_sub(cur_y))
         };
         if card_h >= 1 {
             draw_card_box(
@@ -1186,40 +1265,98 @@ fn render_status_content(
             if !is_col && card_h >= 4 {
                 let body_x = x + 2;
                 let mut row_offset = 1;
-                render_card_kv(
-                    buffer,
+
+                // Fila 1: Project ~/projects/... ◇ main
+                let display_path = if let Some(ctx) = context {
+                    let p = ctx.root_path.to_string_lossy();
+                    if let Ok(home) = std::env::var("HOME") {
+                        if let Some(rest) = p.strip_prefix(&home) {
+                            format!("~{rest}")
+                        } else {
+                            p.to_string()
+                        }
+                    } else {
+                        p.to_string()
+                    }
+                } else {
+                    format!("~/projects/{ws_name}")
+                };
+                let proj_line = if config.right_dock_show_git {
+                    format!("Project  {display_path}  ◇ {branch_name}")
+                } else {
+                    format!("Project  {display_path}")
+                };
+                buffer.set_stringn(
                     body_x,
                     cur_y + row_offset,
-                    inner_w,
-                    "Proyecto:  ",
-                    ws_name,
-                    key_style,
+                    proj_line,
+                    inner_w as usize,
                     val_text,
                 );
                 row_offset += 1;
-                if config.right_dock_show_git {
-                    render_card_kv(
-                        buffer,
-                        body_x,
-                        cur_y + row_offset,
-                        inner_w,
-                        "Rama:      ",
-                        branch_name,
-                        key_style,
-                        Style::default().fg(config.palette.mauve),
-                    );
-                    row_offset += 1;
-                }
+
+                // Fila 2: Model <model_name>
                 if cur_y + row_offset < bottom_limit {
                     render_card_kv(
                         buffer,
                         body_x,
                         cur_y + row_offset,
                         inner_w,
-                        "Modelo:    ",
+                        "Model    ",
                         &status_tab.telemetry.model_name,
                         key_style,
                         val_accent,
+                    );
+                    row_offset += 1;
+                }
+
+                // Fila 3: Divisor horizontal ──────
+                if cur_y + row_offset < bottom_limit && card_h >= 5 {
+                    for col in body_x..(body_x + inner_w) {
+                        if let Some(cell) = buffer.cell_mut((col, cur_y + row_offset)) {
+                            cell.set_symbol("─");
+                            cell.set_style(Style::default().fg(config.palette.surface_dim));
+                        }
+                    }
+                    row_offset += 1;
+                }
+
+                // Fila 4: ◆ engram · ready (7437) • En linea · 27 ob
+                if cur_y + row_offset < bottom_limit && card_h >= 6 {
+                    let engram_line = format!(
+                        "◆ engram · ready ({}) • En linea · {} ob",
+                        status_tab.telemetry.engram.port,
+                        status_tab.telemetry.engram.observations_count
+                    );
+                    buffer.set_stringn(
+                        body_x,
+                        cur_y + row_offset,
+                        engram_line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.green),
+                    );
+                    row_offset += 1;
+                }
+
+                // Fila 5: ◆ MCP: 3 activos · context7, engram, open-design
+                if cur_y + row_offset < bottom_limit && card_h >= 7 {
+                    let mcp_names: Vec<&str> = status_tab.telemetry.mcp_servers.iter().map(|s| s.name.as_str()).collect();
+                    let mcp_names_str = if mcp_names.is_empty() {
+                        "ninguno".to_string()
+                    } else {
+                        mcp_names.join(", ")
+                    };
+                    let mcp_line = format!(
+                        "◆ MCP: {} activos · {}",
+                        status_tab.telemetry.mcp_servers.len(),
+                        mcp_names_str
+                    );
+                    buffer.set_stringn(
+                        body_x,
+                        cur_y + row_offset,
+                        mcp_line,
+                        inner_w as usize,
+                        Style::default().fg(config.palette.teal),
                     );
                 }
             }
@@ -1999,7 +2136,7 @@ fn render_files_content(
     }
 }
 
-fn render_changes_content(
+fn render_git_flow_content(
     buffer: &mut Buffer,
     x: u16,
     y: u16,
@@ -2007,32 +2144,177 @@ fn render_changes_content(
     width: u16,
     config: &ClientShellConfig,
     context: Option<&WorkspaceContext>,
+    git_flow_tab: &mut GitFlowTab,
 ) {
-    if rows < 4 || width < 12 {
+    if rows < 3 || width < 15 || y >= buffer.area.bottom() || x >= buffer.area.right() {
         return;
     }
 
-    buffer.set_string(
-        x + 1,
-        y,
-        "• GIT CHANGES",
-        Style::default().fg(config.palette.accent),
-    );
-    if let Some(ctx) = context {
-        if let Some((ahead, behind)) = ctx.git_ahead_behind {
-            buffer.set_string(
-                x + 1,
-                y + 2,
-                format!("Tracking: ↑{ahead} ↓{behind}"),
-                Style::default().fg(config.palette.subtext0),
-            );
-        } else {
-            buffer.set_string(
-                x + 1,
-                y + 2,
-                "Working tree clean",
-                Style::default().fg(config.palette.green),
-            );
+    let actual_w = width.min(buffer.area.right().saturating_sub(x));
+    let bottom_limit = y + rows;
+
+    // 1. Cabecera superior fija: "◆ GIT FLOW & REPO STATE (LIVE)"
+    let title = "◆ GIT FLOW & REPO STATE (LIVE)";
+    let title_style = Style::default()
+        .fg(config.palette.blue)
+        .add_modifier(ratatui::style::Modifier::BOLD);
+    buffer.set_stringn(x + 1, y, title, actual_w.saturating_sub(2) as usize, title_style);
+
+    let top_y = y + 1;
+    if top_y >= bottom_limit {
+        return;
+    }
+
+    // TOP indicator
+    buffer.set_string(x + 1, top_y, "TOP", Style::default().fg(config.palette.overlay0));
+    if actual_w > 8 {
+        buffer.set_string(x + actual_w.saturating_sub(6), top_y, "▲ OOT", Style::default().fg(config.palette.blue));
+    }
+
+    // Preparar líneas visuales del riel continuo
+    let mut visual_lines: Vec<(String, Style)> = Vec::new();
+
+    let cur_branch = context.and_then(|c| c.branch).unwrap_or("main");
+    let (ahead, _) = context.and_then(|c| c.git_ahead_behind).unwrap_or((2, 0));
+
+    for step in &git_flow_tab.canvas.steps {
+        match step {
+            super::git_flow::GitFlowStep::Commit { hash, branch: _, message: _, files, upstream } => {
+                let f_str = if files.is_empty() { "D".into() } else { files.join(" ") };
+                visual_lines.push((
+                    format!("01 COMMIT ▶ ● {hash} (HEAD: {cur_branch}) [{f_str}] ──> {upstream}"),
+                    Style::default().fg(config.palette.blue),
+                ));
+                visual_lines.push((
+                    "             📄 📄 📄 📄 📄".to_string(),
+                    Style::default().fg(config.palette.overlay0),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Branch { name, .. } => {
+                visual_lines.push((
+                    format!("02 BRANCH ▶ ╭─── {name} (ahead +{ahead})"),
+                    Style::default().fg(config.palette.peach),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Stash { index, file_hint } => {
+                visual_lines.push((
+                    format!("06 STASH  ├──┄┄┄● [{file_hint}] ──> 📥 📦 stash@{{{index}}}"),
+                    Style::default().fg(config.palette.green),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Tag { name, target_ref } => {
+                visual_lines.push((
+                    format!("07 TAG    ▶ ● 🏷️ {name} (anclado a {target_ref})"),
+                    Style::default().fg(config.palette.yellow),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Rebase { commit, .. } => {
+                visual_lines.push((
+                    "04 REBASE   ● A  ───────────┤ reaplicado en main".to_string(),
+                    Style::default().fg(config.palette.peach),
+                ));
+                visual_lines.push((
+                    format!("            ● B  ┄┄┄┄┄┄┄┄┄┄─┤ {commit}"),
+                    Style::default().fg(config.palette.peach),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::CherryPick { commit_hash, note } => {
+                visual_lines.push((
+                    format!("05 CHERRY-  ╭─● {commit_hash} {note}"),
+                    Style::default().fg(config.palette.teal),
+                ));
+                visual_lines.push(("   PICK     │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Merge { branch, .. } => {
+                visual_lines.push((
+                    format!("            ● git merge {branch} | commit de merge"),
+                    Style::default().fg(config.palette.peach),
+                ));
+                visual_lines.push((
+                    "03 MERGE  ◀──╯".to_string(),
+                    Style::default().fg(config.palette.overlay0),
+                ));
+                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::Fork { upstream_repo, my_repo, .. } => {
+                visual_lines.push((
+                    format!("08 FORK   ───● ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ [{upstream_repo}] ───> [{my_repo}]"),
+                    Style::default().fg(config.palette.blue),
+                ));
+                visual_lines.push((
+                    "             │                     ○───────────────○────●".to_string(),
+                    Style::default().fg(config.palette.overlay0),
+                ));
+            }
+            super::git_flow::GitFlowStep::PullRequest { number, title, delta, approved } => {
+                let status_icon = if *approved { "✓ Approved" } else { "Review required" };
+                visual_lines.push((
+                    format!("09 PULL     ╭─● ⑂ PR #{number} ({title}) [+{}/-{}] {status_icon}", delta.0, delta.1),
+                    Style::default().fg(config.palette.green),
+                ));
+                visual_lines.push(("   REQUEST  │".to_string(), Style::default().fg(config.palette.overlay0)));
+            }
+            super::git_flow::GitFlowStep::StackedPrs { prs, current_pr } => {
+                let chain: Vec<String> = prs.iter().map(|p| {
+                    if *p == *current_pr {
+                        format!("[#{p}]")
+                    } else {
+                        format!("#{p}")
+                    }
+                }).collect();
+                let stack_str = chain.join(" ──> ");
+                visual_lines.push((
+                    "10 STACKED  ● ╭── STACKED PRs ────────────────────────────────────╮".to_string(),
+                    Style::default().fg(config.palette.blue),
+                ));
+                visual_lines.push((
+                    format!("              │ ≡ Stack: {stack_str}"),
+                    Style::default().fg(config.palette.text),
+                ));
+                visual_lines.push((
+                    "              ╰───────────────────────────────────────────────────╯".to_string(),
+                    Style::default().fg(config.palette.blue),
+                ));
+            }
+        }
+    }
+
+    // Viewport de renderizado
+    let viewport_y = top_y + 1;
+    let available_content_rows = bottom_limit.saturating_sub(viewport_y + 1) as usize;
+    let offset = git_flow_tab.canvas.scroll_offset.min(visual_lines.len().saturating_sub(1));
+
+    for (idx, (line, style)) in visual_lines.iter().skip(offset).take(available_content_rows).enumerate() {
+        let line_y = viewport_y + idx as u16;
+        if line_y >= bottom_limit.saturating_sub(1) {
+            break;
+        }
+        buffer.set_stringn(x + 1, line_y, line, actual_w.saturating_sub(2) as usize, *style);
+    }
+
+    // BOTTOM indicator y scroll thumb
+    let bottom_row = bottom_limit.saturating_sub(1);
+    if bottom_row > viewport_y {
+        buffer.set_string(x + 1, bottom_row, "BOTTOM", Style::default().fg(config.palette.overlay0));
+        if actual_w > 4 {
+            buffer.set_string(x + actual_w.saturating_sub(2), bottom_row, "▼", Style::default().fg(config.palette.blue));
+        }
+    }
+
+    // Scrollbar lateral thumb en la columna derecha
+    if visual_lines.len() > available_content_rows && available_content_rows > 0 {
+        let thumb_col = x + actual_w.saturating_sub(1);
+        let progress = (offset * available_content_rows) / visual_lines.len();
+        let thumb_y = viewport_y + progress as u16;
+        if thumb_y < bottom_row {
+            if let Some(cell) = buffer.cell_mut((thumb_col, thumb_y)) {
+                cell.set_symbol("█").set_style(Style::default().fg(config.palette.overlay1));
+            }
         }
     }
 }
@@ -2546,10 +2828,10 @@ mod tests {
         assert_eq!(dock.active_tab, DockTabId::Files);
         assert!(dock.files_tab.is_dirty());
 
-        // Al cambiar a Changes, Files se hiberna y Changes pasa a dirty
-        dock.select_tab(DockTabId::Changes);
-        assert_eq!(dock.active_tab, DockTabId::Changes);
-        assert!(dock.changes_tab.is_dirty());
+        // Al cambiar a GitFlow, Files se hiberna y GitFlow pasa a dirty
+        dock.select_tab(DockTabId::GitFlow);
+        assert_eq!(dock.active_tab, DockTabId::GitFlow);
+        assert!(dock.git_flow_tab.is_dirty());
     }
 
     #[test]
@@ -2774,7 +3056,7 @@ mod tests {
         assert_eq!(hits.right_dock_tabs.len(), 3);
         assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
         assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
-        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::Changes);
+        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::GitFlow);
         assert_ne!(hits.right_dock_split_toggle, Rect::default());
         assert!(!hits.right_dock_file_rows.is_empty());
         assert_eq!(hits.right_dock_file_rows[0].1, 0);
@@ -2794,7 +3076,7 @@ mod tests {
         assert_eq!(hits.right_dock_tabs.len(), 3);
         assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
         assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
-        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::Changes);
+        assert_eq!(hits.right_dock_tabs[2].1, DockTabId::GitFlow);
     }
 
     #[test]
@@ -2809,7 +3091,7 @@ mod tests {
         state.hits.right_dock_tabs = vec![
             (Rect::new(61, 0, 11, 1), DockTabId::Status),
             (Rect::new(72, 0, 11, 1), DockTabId::Files),
-            (Rect::new(83, 0, 13, 1), DockTabId::Changes),
+            (Rect::new(83, 0, 14, 1), DockTabId::GitFlow),
         ];
         state.hits.right_dock_split_toggle = Rect::new(100, 0, 10, 1);
         state.hits.right_dock_file_rows = vec![(Rect::new(61, 2, 48, 1), 0)];
@@ -3019,5 +3301,81 @@ mod tests {
             assert_eq!(head.len(), 7);
             assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
         }
+    }
+
+    #[test]
+    fn test_git_flow_tab_renders_live_timeline_and_scroll() {
+        let mut dock = RightDockState::default();
+        dock.select_tab(DockTabId::GitFlow);
+        assert_eq!(dock.active_tab, DockTabId::GitFlow);
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 50, 30);
+        let mut buffer = Buffer::empty(area);
+        let mut hits = crate::client::shell::state::ShellHitMap::default();
+
+        let context = WorkspaceContext {
+            workspace_id: "test-ws",
+            workspace_name: "telar",
+            root_path: Path::new("/"),
+            branch: Some("feat/login"),
+            git_ahead_behind: Some((2, 0)),
+            is_preview: false,
+            agent_status: None,
+            agent_name: None,
+            agent_tokens: None,
+        };
+
+        render_right_dock(&mut buffer, area, &config, &mut dock, Some(&context), &mut hits);
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+
+        assert!(text.contains("GIT FLOW & REPO STATE (LIVE)"));
+        assert!(text.contains("TOP"));
+        assert!(text.contains("01 COMMIT"));
+        assert!(text.contains("02 BRANCH"));
+        assert!(text.contains("06 STASH"));
+        assert!(text.contains("07 TAG"));
+        assert!(text.contains("09 PULL"));
+        assert!(text.contains("STACKED PRs"));
+    }
+
+    #[test]
+    fn test_homologated_status_card_renders_unified_project_engram_and_mcp() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 50, 25);
+        let mut buffer = Buffer::empty(area);
+        let mut status_tab = StatusTab::default();
+
+        let context = WorkspaceContext {
+            workspace_id: "one",
+            workspace_name: "investigaciones",
+            root_path: Path::new("/projects/investigaciones"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: None,
+            agent_name: None,
+            agent_tokens: None,
+        };
+
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            25,
+            50,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
+
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("Status"));
+        assert!(text.contains("Project"));
+        assert!(text.contains("main"));
+        assert!(text.contains("Model"));
+        assert!(text.contains("engram · ready"));
+        assert!(text.contains("MCP: 3 activos"));
     }
 }

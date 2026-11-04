@@ -255,6 +255,7 @@ pub(super) fn render_settings_overlay(
                 "CPAMC",
                 "Tools",
                 "MCP",
+                "Git Flow",
             ];
             for (index, label) in labels.iter().enumerate() {
                 if index >= content.height as usize {

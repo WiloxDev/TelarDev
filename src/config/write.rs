@@ -12,6 +12,7 @@ pub(crate) enum ConfigEdit<'a> {
     DockCpamc(bool),
     DockTools(bool),
     DockMcp(bool),
+    DockGitFlow(bool),
     CpamcExperience(super::CpamcExperienceConfig),
     DockVisible(bool),
 }
@@ -31,6 +32,7 @@ impl ConfigEdit<'_> {
             | Self::DockCpamc(_)
             | Self::DockTools(_)
             | Self::DockMcp(_)
+            | Self::DockGitFlow(_)
             | Self::CpamcExperience(_)
             | Self::DockVisible(_) => "sidebar setting",
         }
@@ -72,6 +74,7 @@ impl ConfigEdit<'_> {
             Self::DockCpamc(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_cpamc", enabled),
             Self::DockTools(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_tools", enabled),
             Self::DockMcp(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_mcp", enabled),
+            Self::DockGitFlow(enabled) => super::upsert_section_bool(content, "ui", "right_dock_show_git_flow", enabled),
             Self::CpamcExperience(exp) => super::upsert_section_value(content, "ui", "cpamc_experience", &format!("\"{}\"", exp.as_str())),
             Self::DockVisible(enabled) => super::upsert_section_bool(content, "ui", "right_dock_enabled", enabled),
         }

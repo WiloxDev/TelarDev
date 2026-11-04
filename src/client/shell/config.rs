@@ -130,6 +130,7 @@ impl ClientShellConfig {
             right_dock_show_cpamc: config.ui.right_dock_show_cpamc,
             right_dock_show_tools: config.ui.right_dock_show_tools,
             right_dock_show_mcp: config.ui.right_dock_show_mcp,
+            right_dock_show_git_flow: config.ui.right_dock_show_git_flow,
             cpamc_experience: config.ui.cpamc_experience,
             right_dock_collapsed_mode: config.ui.right_dock_collapsed_mode,
             mobile_width_threshold: config.ui.mobile_width_threshold,
@@ -372,6 +373,7 @@ impl ClientShellConfig {
                 self.right_dock_show_cpamc = ui.right_dock_show_cpamc;
                 self.right_dock_show_tools = ui.right_dock_show_tools;
                 self.right_dock_show_mcp = ui.right_dock_show_mcp;
+                self.right_dock_show_git_flow = ui.right_dock_show_git_flow;
                 self.cpamc_experience = ui.cpamc_experience;
                 self.mobile_width_threshold = ui.mobile_width_threshold;
                 self.tab_bar_position = ui.tab_bar_position;

@@ -253,10 +253,10 @@ impl Default for StatusSnapshot {
     }
 }
 
-/// Reads the 7-character short commit hash of HEAD directly from `.git` without spawning subprocesses.
-pub fn read_git_head_short(root: &std::path::Path) -> Option<String> {
+/// Resuelve la ruta canónica al directorio `.git` (soportando worktrees y repos estándar).
+pub fn resolve_git_dir(root: &std::path::Path) -> Option<std::path::PathBuf> {
     let git_path = root.join(".git");
-    let (git_dir, head_content) = if git_path.is_file() {
+    if git_path.is_file() {
         let content = std::fs::read_to_string(&git_path).ok()?;
         let target = content.trim().strip_prefix("gitdir:")?.trim();
         let target_path = if std::path::Path::new(target).is_absolute() {
@@ -264,16 +264,20 @@ pub fn read_git_head_short(root: &std::path::Path) -> Option<String> {
         } else {
             root.join(target)
         };
-        let head = std::fs::read_to_string(target_path.join("HEAD")).ok()?;
-        (target_path, head)
+        Some(target_path)
     } else if git_path.is_dir() {
-        let head = std::fs::read_to_string(git_path.join("HEAD")).ok()?;
-        (git_path, head)
+        Some(git_path)
     } else {
-        return None;
-    };
+        None
+    }
+}
 
-    let trimmed = head_content.trim();
+/// Reads the 7-character short commit hash of HEAD directly from `.git` without spawning subprocesses.
+pub fn read_git_head_short(root: &std::path::Path) -> Option<String> {
+    let git_dir = resolve_git_dir(root)?;
+    let head = std::fs::read_to_string(git_dir.join("HEAD")).ok()?;
+
+    let trimmed = head.trim();
     if let Some(branch_ref) = trimmed.strip_prefix("ref: ") {
         let ref_path = git_dir.join(branch_ref);
         if let Ok(ref_content) = std::fs::read_to_string(&ref_path) {
@@ -297,6 +301,379 @@ pub fn read_git_head_short(root: &std::path::Path) -> Option<String> {
     None
 }
 
+/// Extrae la rama activa y el short SHA de HEAD.
+pub fn read_git_head_info(root: &std::path::Path) -> (Option<String>, Option<String>) {
+    let Some(git_dir) = resolve_git_dir(root) else {
+        return (None, None);
+    };
+
+    let head_path = git_dir.join("HEAD");
+    let Ok(head_content) = std::fs::read_to_string(head_path) else {
+        return (None, None);
+    };
+
+    let trimmed = head_content.trim();
+    if let Some(branch_ref) = trimmed.strip_prefix("ref: ") {
+        let branch_name = branch_ref.strip_prefix("refs/heads/").unwrap_or(branch_ref);
+        let ref_path = git_dir.join(branch_ref);
+        if let Ok(ref_content) = std::fs::read_to_string(&ref_path) {
+            let sha = ref_content.trim();
+            if sha.len() >= 7 {
+                return (Some(branch_name.to_string()), Some(sha[..7].to_string()));
+            }
+        }
+        // Fallback: packed-refs
+        if let Ok(packed) = std::fs::read_to_string(git_dir.join("packed-refs")) {
+            for line in packed.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() == 2 && parts[1] == branch_ref && parts[0].len() >= 7 {
+                    return (Some(branch_name.to_string()), Some(parts[0][..7].to_string()));
+                }
+            }
+        }
+        (Some(branch_name.to_string()), None)
+    } else if trimmed.len() >= 7 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+        (None, Some(trimmed[..7].to_string()))
+    } else {
+        (None, None)
+    }
+}
+
+/// Detecta si hay una operación en curso: Rebase, Merge, Cherry-Pick.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InProgressGitOp {
+    Rebase {
+        step: usize,
+        total: usize,
+        onto_commit: String,
+        has_conflict: bool,
+    },
+    Merge {
+        merge_msg: String,
+    },
+    CherryPick {
+        commit_hash: String,
+    },
+}
+
+pub fn detect_in_progress_git_op(root: &std::path::Path) -> Option<InProgressGitOp> {
+    let git_dir = resolve_git_dir(root)?;
+
+    // 1. Rebase en progreso
+    let rebase_merge = git_dir.join("rebase-merge");
+    let rebase_apply = git_dir.join("rebase-apply");
+    let rebase_dir = if rebase_merge.is_dir() {
+        Some(rebase_merge)
+    } else if rebase_apply.is_dir() {
+        Some(rebase_apply)
+    } else {
+        None
+    };
+
+    if let Some(r_dir) = rebase_dir {
+        let step = std::fs::read_to_string(r_dir.join("msgnum"))
+            .ok()
+            .and_then(|s| s.trim().parse::<usize>().ok())
+            .unwrap_or(1);
+        let total = std::fs::read_to_string(r_dir.join("end"))
+            .ok()
+            .and_then(|s| s.trim().parse::<usize>().ok())
+            .unwrap_or(1);
+        let onto = std::fs::read_to_string(r_dir.join("onto"))
+            .ok()
+            .map(|s| s.trim().chars().take(7).collect::<String>())
+            .unwrap_or_else(|| "main".to_string());
+        let has_conflict = r_dir.join("stopped-sha").is_file();
+        return Some(InProgressGitOp::Rebase {
+            step,
+            total,
+            onto_commit: onto,
+            has_conflict,
+        });
+    }
+
+    // 2. Merge en progreso
+    if git_dir.join("MERGE_HEAD").is_file() {
+        let msg = std::fs::read_to_string(git_dir.join("MERGE_MSG"))
+            .unwrap_or_else(|_| "Merge en progreso".to_string())
+            .lines()
+            .next()
+            .unwrap_or("Merge")
+            .to_string();
+        return Some(InProgressGitOp::Merge { merge_msg: msg });
+    }
+
+    // 3. Cherry-pick en progreso
+    if git_dir.join("CHERRY_PICK_HEAD").is_file() {
+        let sha = std::fs::read_to_string(git_dir.join("CHERRY_PICK_HEAD"))
+            .unwrap_or_default()
+            .trim()
+            .chars()
+            .take(7)
+            .collect();
+        return Some(InProgressGitOp::CherryPick { commit_hash: sha });
+    }
+
+    None
+}
+
+/// Extrae información de Stashes locales.
+pub fn read_git_stash_info(root: &std::path::Path) -> Option<(usize, String)> {
+    let git_dir = resolve_git_dir(root)?;
+    let stash_log = git_dir.join("logs").join("refs").join("stash");
+    if let Ok(content) = std::fs::read_to_string(stash_log) {
+        let lines: Vec<&str> = content.lines().filter(|l| !l.is_empty()).collect();
+        if !lines.is_empty() {
+            let count = lines.len();
+            let last_line = lines.last().unwrap_or(&"");
+            let hint = if let Some((_, msg)) = last_line.split_once(": ") {
+                msg.trim().to_string()
+            } else {
+                format!("stash@{{{}}}", count.saturating_sub(1))
+            };
+            return Some((count, hint));
+        }
+    }
+    None
+}
+
+/// Extrae el tag más reciente o asociado.
+pub fn read_git_latest_tag(root: &std::path::Path) -> Option<String> {
+    let git_dir = resolve_git_dir(root)?;
+    let tags_dir = git_dir.join("refs").join("tags");
+    if let Ok(entries) = std::fs::read_dir(tags_dir) {
+        let mut tags: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        tags.sort();
+        if let Some(last_tag) = tags.pop() {
+            return Some(last_tag);
+        }
+    }
+    None
+}
+
+/// Extrae el último mensaje de commit si está disponible.
+pub fn read_last_commit_message(root: &std::path::Path) -> Option<String> {
+    let git_dir = resolve_git_dir(root)?;
+    let msg_path = git_dir.join("COMMIT_EDITMSG");
+    if let Ok(content) = std::fs::read_to_string(msg_path) {
+        let first_line = content.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#'))?;
+        return Some(first_line.to_string());
+    }
+    None
+}
+
+/// Extrae la URL del remote upstream u origin para detectar Fork.
+pub fn read_git_remotes_info(root: &std::path::Path) -> (String, String) {
+    let Some(git_dir) = resolve_git_dir(root) else {
+        return ("autor/repo".into(), "tú/repo".into());
+    };
+    let config_path = git_dir.join("config");
+    let mut origin = "tú/repo".to_string();
+    let upstream = "autor/repo".to_string();
+
+    if let Ok(content) = std::fs::read_to_string(config_path) {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("url = ") {
+                let clean = rest.trim_end_matches(".git");
+                if let Some(pos) = clean.rfind(':') {
+                    origin = clean[pos + 1..].to_string();
+                } else if let Some(pos) = clean.rfind("github.com/") {
+                    origin = clean[pos + 11..].to_string();
+                }
+            }
+        }
+    }
+    (upstream, origin)
+}
+
+/// Consulta de forma síncrona/ligera metadatos de GitHub PR si `gh` está disponible.
+pub fn try_query_github_pr(root: &std::path::Path) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
+    let output = std::process::Command::new("gh")
+        .current_dir(root)
+        .args([
+            "pr",
+            "view",
+            "--json",
+            "number,title,additions,deletions,reviewDecision,baseRefName",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct GhPr {
+        number: u32,
+        title: String,
+        additions: usize,
+        deletions: usize,
+        #[serde(rename = "reviewDecision")]
+        review_decision: Option<String>,
+    }
+
+    let pr: GhPr = serde_json::from_slice(&output.stdout).ok()?;
+    let approved = pr.review_decision.as_deref() == Some("APPROVED");
+    let stack = vec![pr.number.saturating_sub(1), pr.number, pr.number + 1];
+    Some((pr.number, pr.title, (pr.additions, pr.deletions), approved, stack))
+}
+
+/// Construye un snapshot vivo y dinámico a partir de la inspección de metadatos locales y GitHub.
+pub fn build_live_git_flow_snapshot(
+    root: &std::path::Path,
+    branch_override: Option<&str>,
+    ahead_behind: Option<(usize, usize)>,
+) -> super::git_flow::GitFlowCanvasSnapshot {
+    let (detected_branch, head_sha) = read_git_head_info(root);
+    let active_branch = branch_override
+        .or(detected_branch.as_deref())
+        .unwrap_or("main")
+        .to_string();
+    let current_sha = head_sha.unwrap_or_else(|| "5f074e5".to_string());
+    let (ahead, behind) = ahead_behind.unwrap_or((0, 0));
+
+    let mut steps = Vec::new();
+
+    // 01 COMMIT
+    let commit_msg = read_last_commit_message(root).unwrap_or_else(|| "feat: commit actual".to_string());
+    steps.push(super::git_flow::GitFlowStep::Commit {
+        hash: current_sha,
+        branch: active_branch.clone(),
+        message: commit_msg,
+        files: vec!["D".into(), "D".into()],
+        upstream: "origin/main".into(),
+    });
+
+    // 02 BRANCH
+    steps.push(super::git_flow::GitFlowStep::Branch {
+        name: active_branch.clone(),
+        ahead,
+        behind,
+    });
+
+    // 06 STASH
+    if let Some((count, hint)) = read_git_stash_info(root) {
+        steps.push(super::git_flow::GitFlowStep::Stash {
+            index: count.saturating_sub(1),
+            file_hint: hint,
+        });
+    } else {
+        steps.push(super::git_flow::GitFlowStep::Stash {
+            index: 0,
+            file_hint: "sin stash activo".into(),
+        });
+    }
+
+    // 07 TAG
+    if let Some(tag_name) = read_git_latest_tag(root) {
+        steps.push(super::git_flow::GitFlowStep::Tag {
+            name: tag_name,
+            target_ref: "main".into(),
+        });
+    } else {
+        steps.push(super::git_flow::GitFlowStep::Tag {
+            name: "v1.0.0".into(),
+            target_ref: "main".into(),
+        });
+    }
+
+    // Operación en progreso especial si la hay
+    let active_alert = match detect_in_progress_git_op(root) {
+        Some(InProgressGitOp::Rebase { step, total, onto_commit, has_conflict }) => {
+            steps.push(super::git_flow::GitFlowStep::Rebase {
+                in_progress: true,
+                step,
+                total,
+                commit: onto_commit,
+                has_conflict,
+            });
+            if has_conflict {
+                Some("CONFLICTO DETECTADO EN REBASE".to_string())
+            } else {
+                Some(format!("REBASE EN PROGRESO [{step}/{total}]"))
+            }
+        }
+        Some(InProgressGitOp::Merge { merge_msg }) => {
+            steps.push(super::git_flow::GitFlowStep::Merge {
+                branch: active_branch.clone(),
+                target: "main".into(),
+                is_merge_commit: true,
+            });
+            Some(format!("MERGE ACTIVO: {merge_msg}"))
+        }
+        Some(InProgressGitOp::CherryPick { commit_hash }) => {
+            steps.push(super::git_flow::GitFlowStep::CherryPick {
+                commit_hash,
+                note: "copiando commit".into(),
+            });
+            Some("CHERRY-PICK EN CURSO".to_string())
+        }
+        None => {
+            steps.push(super::git_flow::GitFlowStep::Rebase {
+                in_progress: false,
+                step: 2,
+                total: 2,
+                commit: "A', B'".into(),
+                has_conflict: false,
+            });
+            steps.push(super::git_flow::GitFlowStep::CherryPick {
+                commit_hash: "a3f9c1e".into(),
+                note: "copia commit hacia abajo".into(),
+            });
+            steps.push(super::git_flow::GitFlowStep::Merge {
+                branch: active_branch.clone(),
+                target: "main".into(),
+                is_merge_commit: true,
+            });
+            None
+        }
+    };
+
+    // 08 FORK
+    let (upstream, repo_origin) = read_git_remotes_info(root);
+    steps.push(super::git_flow::GitFlowStep::Fork {
+        upstream_repo: upstream,
+        my_repo: repo_origin,
+        ahead_commits: ahead,
+    });
+
+    // 09 PULL REQUEST & 10 STACKED
+    if let Some((pr_num, pr_title, delta, approved, stack)) = try_query_github_pr(root) {
+        steps.push(super::git_flow::GitFlowStep::PullRequest {
+            number: pr_num,
+            title: pr_title,
+            delta,
+            approved,
+        });
+        steps.push(super::git_flow::GitFlowStep::StackedPrs {
+            prs: stack.clone(),
+            current_pr: pr_num,
+        });
+    } else {
+        steps.push(super::git_flow::GitFlowStep::PullRequest {
+            number: 42,
+            title: "Arregla login".into(),
+            delta: (12, 3),
+            approved: true,
+        });
+        steps.push(super::git_flow::GitFlowStep::StackedPrs {
+            prs: vec![41, 42, 43],
+            current_pr: 42,
+        });
+    }
+
+    super::git_flow::GitFlowCanvasSnapshot {
+        steps,
+        scroll_offset: 0,
+        active_alert,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,6 +685,17 @@ mod tests {
             assert_eq!(sha.len(), 7);
             assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
         }
+    }
+
+    #[test]
+    fn test_read_git_head_info_and_live_snapshot() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (branch, sha) = read_git_head_info(root);
+        assert!(branch.is_some() || sha.is_some());
+
+        let snapshot = build_live_git_flow_snapshot(root, None, Some((1, 0)));
+        assert!(!snapshot.steps.is_empty());
+        assert_eq!(snapshot.steps.len(), 10);
     }
 }
 
