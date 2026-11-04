@@ -825,6 +825,12 @@ impl ClientShellState {
                         self.right_dock_state.layout_mode = self.right_dock_state.layout_mode.toggle();
                         outcome.repaint = true;
                     }
+                    KeyCode::Char('g') | KeyCode::Char('G') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                            self.right_dock_state.git_flow_tab.canvas.scroll_to_top();
+                            outcome.repaint = true;
+                        }
+                    }
                     KeyCode::Down | KeyCode::Char('j') => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.select_next();
