@@ -108,6 +108,7 @@ pub trait DockTab: Send + Sync {
 #[allow(dead_code)]
 pub struct StatusTab {
     is_dirty: bool,
+    cached_root: Option<PathBuf>,
     pub active_agent_status: Option<String>,
     pub running_jobs_count: usize,
     pub todos_summary: Option<String>,
@@ -129,12 +130,28 @@ impl StatusTab {
         collapsed.insert(5);
         Self {
             is_dirty: true,
+            cached_root: None,
             active_agent_status: None,
             running_jobs_count: 0,
             todos_summary: None,
             collapsed_sections: collapsed,
             telemetry: super::telemetry::StatusSnapshot::default(),
         }
+    }
+
+    pub fn refresh_if_needed(&mut self, root: &Path, branch: Option<&str>) {
+        if !self.is_dirty && self.cached_root.as_deref() == Some(root) {
+            return;
+        }
+
+        self.cached_root = Some(root.to_path_buf());
+        if let Some(b) = branch {
+            self.telemetry.git.branch = b.to_string();
+        }
+        if let Some(head) = super::telemetry::read_git_head_short(root) {
+            self.telemetry.git.head_commit = Some(head);
+        }
+        self.is_dirty = false;
     }
 
     pub fn mark_dirty(&mut self) {
@@ -806,6 +823,9 @@ pub(super) fn render_right_dock(
 
     if dock_state.layout_mode == DockLayoutMode::SplitVertical && available_rows >= 14 {
         let half_rows = available_rows / 2;
+        if let Some(ctx) = context {
+            dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+        }
         render_status_content(
             buffer,
             content_x,
@@ -843,6 +863,9 @@ pub(super) fn render_right_dock(
     } else {
         match dock_state.active_tab {
             DockTabId::Status => {
+                if let Some(ctx) = context {
+                    dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+                }
                 render_status_content(
                     buffer,
                     content_x,
@@ -2984,5 +3007,17 @@ mod tests {
             &palette,
         );
         assert_eq!(dock_footer, None, "RightDock mode must never render intrusive footer bar across terminal");
+    }
+
+    #[test]
+    fn test_status_tab_refresh_if_needed_updates_live_git_head_and_branch() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut status = StatusTab::new();
+        status.refresh_if_needed(root, Some("feature-test"));
+        assert_eq!(status.telemetry.git.branch, "feature-test");
+        if let Some(head) = &status.telemetry.git.head_commit {
+            assert_eq!(head.len(), 7);
+            assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
+        }
     }
 }

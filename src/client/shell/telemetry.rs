@@ -252,3 +252,62 @@ impl Default for StatusSnapshot {
         }
     }
 }
+
+/// Reads the 7-character short commit hash of HEAD directly from `.git` without spawning subprocesses.
+pub fn read_git_head_short(root: &std::path::Path) -> Option<String> {
+    let git_path = root.join(".git");
+    let (git_dir, head_content) = if git_path.is_file() {
+        let content = std::fs::read_to_string(&git_path).ok()?;
+        let target = content.trim().strip_prefix("gitdir:")?.trim();
+        let target_path = if std::path::Path::new(target).is_absolute() {
+            std::path::PathBuf::from(target)
+        } else {
+            root.join(target)
+        };
+        let head = std::fs::read_to_string(target_path.join("HEAD")).ok()?;
+        (target_path, head)
+    } else if git_path.is_dir() {
+        let head = std::fs::read_to_string(git_path.join("HEAD")).ok()?;
+        (git_path, head)
+    } else {
+        return None;
+    };
+
+    let trimmed = head_content.trim();
+    if let Some(branch_ref) = trimmed.strip_prefix("ref: ") {
+        let ref_path = git_dir.join(branch_ref);
+        if let Ok(ref_content) = std::fs::read_to_string(&ref_path) {
+            let sha = ref_content.trim();
+            if sha.len() >= 7 {
+                return Some(sha[..7].to_string());
+            }
+        }
+        // Fallback: packed-refs
+        if let Ok(packed) = std::fs::read_to_string(git_dir.join("packed-refs")) {
+            for line in packed.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() == 2 && parts[1] == branch_ref && parts[0].len() >= 7 {
+                    return Some(parts[0][..7].to_string());
+                }
+            }
+        }
+    } else if trimmed.len() >= 7 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Some(trimmed[..7].to_string());
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_git_head_short_resolves_valid_sha() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        if let Some(sha) = read_git_head_short(root) {
+            assert_eq!(sha.len(), 7);
+            assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
+        }
+    }
+}
+
