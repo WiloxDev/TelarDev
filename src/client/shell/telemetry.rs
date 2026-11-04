@@ -556,28 +556,18 @@ pub fn build_live_git_flow_snapshot(
         behind,
     });
 
-    // 06 STASH
+    // 06 STASH (solo si hay stashes reales)
     if let Some((count, hint)) = read_git_stash_info(root) {
         steps.push(super::git_flow::GitFlowStep::Stash {
             index: count.saturating_sub(1),
             file_hint: hint,
         });
-    } else {
-        steps.push(super::git_flow::GitFlowStep::Stash {
-            index: 0,
-            file_hint: "sin stash activo".into(),
-        });
     }
 
-    // 07 TAG
+    // 07 TAG (solo si hay tags reales)
     if let Some(tag_name) = read_git_latest_tag(root) {
         steps.push(super::git_flow::GitFlowStep::Tag {
             name: tag_name,
-            target_ref: "main".into(),
-        });
-    } else {
-        steps.push(super::git_flow::GitFlowStep::Tag {
-            name: "v1.0.0".into(),
             target_ref: "main".into(),
         });
     }
@@ -613,36 +603,20 @@ pub fn build_live_git_flow_snapshot(
             });
             Some("CHERRY-PICK EN CURSO".to_string())
         }
-        None => {
-            steps.push(super::git_flow::GitFlowStep::Rebase {
-                in_progress: false,
-                step: 2,
-                total: 2,
-                commit: "A', B'".into(),
-                has_conflict: false,
-            });
-            steps.push(super::git_flow::GitFlowStep::CherryPick {
-                commit_hash: "a3f9c1e".into(),
-                note: "copia commit hacia abajo".into(),
-            });
-            steps.push(super::git_flow::GitFlowStep::Merge {
-                branch: active_branch.clone(),
-                target: "main".into(),
-                is_merge_commit: true,
-            });
-            None
-        }
+        None => None,
     };
 
-    // 08 FORK
+    // 08 FORK (solo si hay remote configurado)
     let (upstream, repo_origin) = read_git_remotes_info(root);
-    steps.push(super::git_flow::GitFlowStep::Fork {
-        upstream_repo: upstream,
-        my_repo: repo_origin,
-        ahead_commits: ahead,
-    });
+    if !repo_origin.is_empty() && repo_origin != "tú/repo" {
+        steps.push(super::git_flow::GitFlowStep::Fork {
+            upstream_repo: upstream,
+            my_repo: repo_origin,
+            ahead_commits: ahead,
+        });
+    }
 
-    // 09 PULL REQUEST & 10 STACKED
+    // 09 PULL REQUEST & 10 STACKED (solo si gh devuelve un PR real)
     if let Some((pr_num, pr_title, delta, approved, stack)) = try_query_github_pr(root) {
         steps.push(super::git_flow::GitFlowStep::PullRequest {
             number: pr_num,
@@ -653,17 +627,6 @@ pub fn build_live_git_flow_snapshot(
         steps.push(super::git_flow::GitFlowStep::StackedPrs {
             prs: stack.clone(),
             current_pr: pr_num,
-        });
-    } else {
-        steps.push(super::git_flow::GitFlowStep::PullRequest {
-            number: 42,
-            title: "Arregla login".into(),
-            delta: (12, 3),
-            approved: true,
-        });
-        steps.push(super::git_flow::GitFlowStep::StackedPrs {
-            prs: vec![41, 42, 43],
-            current_pr: 42,
         });
     }
 
@@ -693,9 +656,11 @@ mod tests {
         let (branch, sha) = read_git_head_info(root);
         assert!(branch.is_some() || sha.is_some());
 
+        // El snapshot vivo solo emite los pasos que existen realmente en el repo
         let snapshot = build_live_git_flow_snapshot(root, None, Some((1, 0)));
         assert!(!snapshot.steps.is_empty());
-        assert_eq!(snapshot.steps.len(), 10);
+        // Al menos commit y branch siempre existen en un repo válido
+        assert!(snapshot.steps.len() >= 2);
     }
 }
 

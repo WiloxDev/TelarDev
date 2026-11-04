@@ -848,9 +848,9 @@ pub(super) fn render_right_dock(
             .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
     }
     if content_x + 22 < area.right() {
-        buffer.set_string(content_x + 22, tab_y, " ⎇ Git Flow ", git_flow_style);
+        buffer.set_string(content_x + 22, tab_y, " ⎇ Flow ", git_flow_style);
         hits.right_dock_tabs
-            .push((Rect::new(content_x + 22, tab_y, 14, 1), DockTabId::GitFlow));
+            .push((Rect::new(content_x + 22, tab_y, 10, 1), DockTabId::GitFlow));
     }
 
     // Indicador Split View en el extremo derecho del header (Punto 5)
@@ -3333,10 +3333,6 @@ mod tests {
         assert!(text.contains("TOP"));
         assert!(text.contains("01 COMMIT"));
         assert!(text.contains("02 BRANCH"));
-        assert!(text.contains("06 STASH"));
-        assert!(text.contains("07 TAG"));
-        assert!(text.contains("09 PULL"));
-        assert!(text.contains("STACKED PRs"));
     }
 
     #[test]
