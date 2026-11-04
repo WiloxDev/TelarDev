@@ -28,6 +28,10 @@ pub(crate) fn should_show_scrollbar(metrics: crate::pane::ScrollMetrics) -> bool
     metrics.max_offset_from_bottom > 0
 }
 
+pub(crate) fn should_show_pane_scrollbar(metrics: crate::pane::ScrollMetrics) -> bool {
+    metrics.offset_from_bottom > 0
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ScrollbarThumb {
     pub top: u16,
@@ -203,3 +207,36 @@ pub(super) fn render_pane_scrollbar(
         info.is_focused,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pane_scrollbar_visibility_depends_on_active_scroll_offset() {
+        let at_bottom_with_history = crate::pane::ScrollMetrics {
+            offset_from_bottom: 0,
+            max_offset_from_bottom: 50,
+            viewport_rows: 24,
+        };
+        assert!(
+            !should_show_pane_scrollbar(at_bottom_with_history),
+            "pane scrollbar should be hidden at the prompt bottom"
+        );
+        assert!(
+            should_show_scrollbar(at_bottom_with_history),
+            "modal/static views still see scrollable content"
+        );
+
+        let scrolled_up = crate::pane::ScrollMetrics {
+            offset_from_bottom: 12,
+            max_offset_from_bottom: 50,
+            viewport_rows: 24,
+        };
+        assert!(
+            should_show_pane_scrollbar(scrolled_up),
+            "pane scrollbar should appear when scrolled up into history"
+        );
+    }
+}
+

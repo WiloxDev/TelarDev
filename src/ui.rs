@@ -30,7 +30,7 @@ pub(crate) use self::release_notes::{
 pub(crate) use self::scrollbar::{
     release_notes_scrollbar_rect, render_pane_scrollbar_buffer, render_scrollbar_buffer,
     scrollbar_offset_from_drag_row, scrollbar_offset_from_row, scrollbar_thumb,
-    scrollbar_thumb_grab_offset,
+    scrollbar_thumb_grab_offset, should_show_pane_scrollbar,
 };
 pub(crate) use self::sidebar::{
     agent_panel_entries_from, expanded_sidebar_sections, resolved_token_spans, sidebar_agent_rows,

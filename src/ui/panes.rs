@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::scrollbar::{render_pane_scrollbar, should_show_scrollbar};
+use super::scrollbar::{render_pane_scrollbar, should_show_pane_scrollbar};
 #[cfg(test)]
 use super::text::display_width;
 use super::text::truncate_end;
@@ -304,7 +304,7 @@ fn stable_scrollbar_gutter(
     );
     let scrollbar_rect = rt
         .scroll_metrics()
-        .filter(|metrics| should_show_scrollbar(*metrics))
+        .filter(|metrics| should_show_pane_scrollbar(*metrics))
         .map(|_| gutter);
 
     (inner_rect, scrollbar_rect)
@@ -1372,6 +1372,7 @@ mod tests {
             );
         };
 
+        app.workspaces[0].tabs[0].runtimes[&root_pane].scroll_up(2);
         assert_geometry(39, true);
         app.workspaces[0].tabs[0].runtimes[&root_pane].test_process_pty_bytes(b"\x1b[?1049h");
         assert_geometry(40, false);
@@ -1482,6 +1483,7 @@ mod tests {
         );
         app.workspaces = vec![workspace];
         app.active = Some(0);
+        app.workspaces[0].tabs[0].runtimes[&root_pane].scroll_up(2);
 
         let area = Rect::new(10, 3, 40, 8);
         let terminal_runtimes = TerminalRuntimeRegistry::new();
@@ -1511,6 +1513,62 @@ mod tests {
         assert_eq!(info.rect, area);
         assert_eq!(info.scrollbar_rect, None);
         assert_eq!(info.inner_rect, area);
+    }
+
+    #[tokio::test]
+    async fn pane_scrollbar_auto_hides_at_bottom_and_appears_on_scroll_up() {
+        let mut app = AppState::test_new();
+        let mut workspace = Workspace::test_new("test");
+        let root_pane = workspace.tabs[0].root_pane;
+        workspace.tabs[0].runtimes.insert(
+            root_pane,
+            TerminalRuntime::test_with_scrollback_bytes(
+                40,
+                8,
+                1024,
+                b"one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n",
+            ),
+        );
+        app.workspaces = vec![workspace];
+        app.active = Some(0);
+
+        let area = Rect::new(10, 3, 40, 8);
+        let terminal_runtimes = TerminalRuntimeRegistry::new();
+
+        // At the bottom, gutter is reserved (width 39) but scrollbar is auto-hidden (None)
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            area,
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        assert_eq!(infos[0].scrollbar_rect, None);
+        assert_eq!(infos[0].inner_rect, Rect::new(10, 3, 39, 8));
+
+        // When scrolling up, scrollbar appears at the reserved column
+        app.workspaces[0].tabs[0].runtimes[&root_pane].scroll_up(2);
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            area,
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        assert_eq!(infos[0].scrollbar_rect, Some(Rect::new(49, 3, 1, 8)));
+        assert_eq!(infos[0].inner_rect, Rect::new(10, 3, 39, 8));
+
+        // When returning to bottom, scrollbar auto-hides again without reflow
+        app.workspaces[0].tabs[0].runtimes[&root_pane].scroll_down(2);
+        let infos = compute_pane_infos(
+            &app,
+            &terminal_runtimes,
+            area,
+            false,
+            crate::kitty_graphics::HostCellSize::default(),
+        );
+        assert_eq!(infos[0].scrollbar_rect, None);
+        assert_eq!(infos[0].inner_rect, Rect::new(10, 3, 39, 8));
     }
 
     #[test]

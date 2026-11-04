@@ -98,7 +98,7 @@ fn retained_scrollbar_patch(
     metrics: Option<crate::pane::ScrollMetrics>,
 ) -> Option<Vec<protocol::PaneSurfacePatchRow>> {
     let next_rect = metrics
-        .filter(|metrics| metrics.max_offset_from_bottom > 0)
+        .filter(|metrics| crate::ui::should_show_pane_scrollbar(*metrics))
         .filter(|_| app.state.pane_scrollbars && !alternate_screen_active)
         .and_then(|_| {
             let rect = protocol::SurfaceRect {
