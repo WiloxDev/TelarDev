@@ -75,6 +75,8 @@ pub struct WorkspaceContext<'a> {
     pub git_ahead_behind: Option<(usize, usize)>,
     pub agent_status: Option<crate::api::schema::AgentStatus>,
     pub agent_name: Option<&'a str>,
+    // Retained for agent token breakdown integration in right dock
+    #[allow(dead_code)]
     pub agent_tokens: Option<&'a [(String, String)]>,
     pub is_preview: bool,
     pub siblings: Vec<SiblingWorkspaceContext<'a>>,
@@ -139,10 +141,9 @@ impl Default for StatusTab {
 
 impl StatusTab {
     pub fn new() -> Self {
-        let mut collapsed = BTreeSet::new();
-        // Proyecto (3) y SDD (5) colapsados por defecto para ajuste ergonómico
-        collapsed.insert(3);
-        collapsed.insert(5);
+        let collapsed = BTreeSet::new();
+        // In Gentle Shell flat rail layout, all sections (TODOS, AGENTS, CHANGES, STATS, INTEGRATIONS)
+        // are open by default for immediate HUD visibility.
         Self {
             is_dirty: true,
             cached_root: None,
@@ -1033,183 +1034,74 @@ pub(super) fn render_right_dock(
     }
 }
 
-fn draw_card_box(
-    buffer: &mut Buffer,
-    x: u16,
-    y: u16,
-    w: u16,
-    h: u16,
-    title: &str,
-    badge: &str,
-    border_style: Style,
-    title_style: Style,
-    badge_style: Style,
-    hits: Option<&mut super::state::ShellHitMap>,
-    section_id: Option<u8>,
-) {
-    if w < 6 || h == 0 || y >= buffer.area.bottom() || x >= buffer.area.right() {
-        return;
-    }
-    let actual_w = w.min(buffer.area.right().saturating_sub(x));
-    let right_x = x + actual_w.saturating_sub(1);
-
-    // Caso colapsado (h == 1):
-    if h == 1 {
-        if let Some(c) = buffer.cell_mut((x, y)) {
-            c.set_symbol("╭").set_style(border_style);
-        }
-        if let Some(c) = buffer.cell_mut((right_x, y)) {
-            c.set_symbol("╮").set_style(border_style);
-        }
-        for col in (x + 1)..right_x {
-            if let Some(c) = buffer.cell_mut((col, y)) {
-                c.set_symbol("─").set_style(border_style);
-            }
-        }
-        let title_x = x + 2;
-        let badge_len = badge.chars().count() as u16;
-        let badge_x = if badge_len > 0 && right_x > badge_len + 1 {
-            right_x.saturating_sub(badge_len + 1)
-        } else {
-            right_x
-        };
-        let title_fmt = if title.starts_with('◈') || title.starts_with('•') || title.starts_with('⚡') {
-            format!(" {title} ")
-        } else {
-            format!(" ◈ {title} ")
-        };
-        let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
-        if max_title_len > 0 && !title.is_empty() {
-            buffer.set_stringn(title_x, y, title_fmt, max_title_len, title_style);
-        }
-        if badge_len > 0 && badge_x > title_x {
-            buffer.set_stringn(badge_x, y, badge, badge_len as usize, badge_style);
-            if let (Some(h), Some(sec)) = (hits, section_id) {
-                h.right_dock_section_toggles
-                    .push((Rect::new(badge_x, y, badge_len, 1), sec));
-            }
-        }
-        return;
-    }
-
-    let actual_h = h.min(buffer.area.bottom().saturating_sub(y));
-    let bottom_y = y + actual_h.saturating_sub(1);
-
-    // Esquinas redondeadas
-    if let Some(c) = buffer.cell_mut((x, y)) {
-        c.set_symbol("╭").set_style(border_style);
-    }
-    if let Some(c) = buffer.cell_mut((right_x, y)) {
-        c.set_symbol("╮").set_style(border_style);
-    }
-    if let Some(c) = buffer.cell_mut((x, bottom_y)) {
-        c.set_symbol("╰").set_style(border_style);
-    }
-    if let Some(c) = buffer.cell_mut((right_x, bottom_y)) {
-        c.set_symbol("╯").set_style(border_style);
-    }
-
-    // Bordes laterales
-    for row in (y + 1)..bottom_y {
-        if let Some(c) = buffer.cell_mut((x, row)) {
-            c.set_symbol("│").set_style(border_style);
-        }
-        if let Some(c) = buffer.cell_mut((right_x, row)) {
-            c.set_symbol("│").set_style(border_style);
-        }
-    }
-
-    // Borde inferior
-    for col in (x + 1)..right_x {
-        if let Some(c) = buffer.cell_mut((col, bottom_y)) {
-            c.set_symbol("─").set_style(border_style);
-        }
-    }
-
-    // Borde superior con Título y Badge
-    for col in (x + 1)..right_x {
-        if let Some(c) = buffer.cell_mut((col, y)) {
-            c.set_symbol("─").set_style(border_style);
-        }
-    }
-
-    // Título a la izquierda: "╭─ Titulo ──"
-    let title_x = x + 2;
-    let badge_len = badge.chars().count() as u16;
-    let badge_x = if badge_len > 0 && right_x > badge_len + 1 {
-        right_x.saturating_sub(badge_len + 1)
-    } else {
-        right_x
-    };
-
-    let title_fmt = if title.starts_with('◈') || title.starts_with('•') || title.starts_with('⚡') {
-        format!(" {title} ")
-    } else {
-        format!(" ◈ {title} ")
-    };
-    let max_title_len = (badge_x.saturating_sub(title_x + 1)) as usize;
-    if max_title_len > 0 && !title.is_empty() {
-        buffer.set_stringn(title_x, y, title_fmt, max_title_len, title_style);
-    }
-
-    // Badge a la derecha: "[-]╮"
-    if badge_len > 0 && badge_x > title_x {
-        buffer.set_stringn(badge_x, y, badge, badge_len as usize, badge_style);
-        if let (Some(h), Some(sec)) = (hits, section_id) {
-            h.right_dock_section_toggles
-                .push((Rect::new(badge_x, y, badge_len, 1), sec));
-        }
-    }
-}
-
-fn render_mini_bar(
+fn render_panel_header_rail(
     buffer: &mut Buffer,
     x: u16,
     y: u16,
     width: u16,
-    percent: u8,
-    active_style: Style,
-    inactive_style: Style,
+    title: &str,
+    right_tag: Option<&str>,
+    is_open: bool,
+    header_style: Style,
+    tag_style: Style,
+    hits: Option<&mut super::state::ShellHitMap>,
+    section_id: Option<u8>,
 ) {
-    if width == 0 || y >= buffer.area.bottom() {
+    if width < 6 || y >= buffer.area.bottom() || x >= buffer.area.right() {
         return;
     }
-    let filled = ((width as u32 * percent.min(100) as u32) / 100) as u16;
-    for i in 0..width {
-        let col = x + i;
-        if col >= buffer.area.right() {
-            break;
+    let glyph = if is_open { "▾" } else { "▸" };
+    let header_text = format!("{glyph} {title}");
+    buffer.set_string(x, y, &header_text, header_style);
+
+    let tag_len = right_tag.map(|t| t.chars().count() as u16).unwrap_or(0);
+    if let Some(tag) = right_tag {
+        let tag_x = x + width.saturating_sub(tag_len);
+        if tag_x > x + (header_text.chars().count() as u16) {
+            buffer.set_stringn(tag_x, y, tag, tag_len as usize, tag_style);
         }
-        if let Some(cell) = buffer.cell_mut((col, y)) {
-            if i < filled {
-                cell.set_symbol("━").set_style(active_style);
-            } else {
-                cell.set_symbol("─").set_style(inactive_style);
-            }
-        }
+    }
+
+    if let (Some(h), Some(sec)) = (hits, section_id) {
+        h.right_dock_section_toggles
+            .push((Rect::new(x, y, width, 1), sec));
     }
 }
 
-fn render_card_kv(
+fn render_panel_kv_rail(
     buffer: &mut Buffer,
     x: u16,
     y: u16,
-    inner_w: u16,
+    width: u16,
     key: &str,
-    val: &str,
+    val_left: &str,
+    val_right: Option<&str>,
     key_style: Style,
-    val_style: Style,
+    val_left_style: Style,
+    val_right_style: Style,
 ) {
-    if inner_w < 6 || y >= buffer.area.bottom() {
+    if width < 8 || y >= buffer.area.bottom() || x >= buffer.area.right() {
         return;
     }
-    let key_col_w = (key.chars().count() as u16).min(12);
-    let val_x = x + key_col_w + 1;
-    let max_val_len = (inner_w.saturating_sub(key_col_w + 1)) as usize;
+    let key_w = key.chars().count() as u16;
+    buffer.set_stringn(x, y, key, key_w as usize, key_style);
 
-    buffer.set_stringn(x, y, key, key_col_w as usize, key_style);
-    if val_x < buffer.area.right() && max_val_len > 0 {
-        buffer.set_stringn(val_x, y, val, max_val_len, val_style);
+    let left_x = x + key_w;
+    let right_len = val_right.map(|r| r.chars().count() as u16).unwrap_or(0);
+    let right_x = x + width.saturating_sub(right_len);
+
+    let max_left = if right_len > 0 && right_x > left_x {
+        (right_x.saturating_sub(left_x + 1)) as usize
+    } else {
+        (width.saturating_sub(key_w)) as usize
+    };
+
+    buffer.set_stringn(left_x, y, val_left, max_left, val_left_style);
+
+    if let Some(right) = val_right {
+        if right_x > left_x + (val_left.chars().count() as u16) {
+            buffer.set_stringn(right_x, y, right, right_len as usize, val_right_style);
+        }
     }
 }
 
@@ -1232,801 +1124,479 @@ fn render_status_content(
     let is_preview = context.map(|c| c.is_preview).unwrap_or(false);
     let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
-    let card_border_style = Style::default().fg(config.palette.overlay0);
-    let card_title_style = Style::default()
-        .fg(config.palette.mauve)
-        .add_modifier(ratatui::style::Modifier::BOLD);
-    let card_badge_style = Style::default()
-        .fg(config.palette.subtext0)
-        .add_modifier(ratatui::style::Modifier::BOLD);
-    let key_style = Style::default().fg(config.palette.overlay0);
-    let val_accent = Style::default().fg(config.palette.accent);
-    let val_text = Style::default()
+    let header_style = Style::default()
         .fg(config.palette.text)
         .add_modifier(ratatui::style::Modifier::BOLD);
-    let val_dim = Style::default().fg(config.palette.subtext0);
-    let card_w = width.saturating_sub(2);
-    let inner_w = card_w.saturating_sub(2);
+    let tag_style = Style::default().fg(config.palette.overlay0);
+    let key_style = Style::default().fg(config.palette.overlay0);
+    let val_accent = Style::default().fg(config.palette.accent);
+    let val_text = Style::default().fg(config.palette.text);
+    let val_dim = Style::default().fg(config.palette.overlay0);
 
-    // 1. Cabecera superior centrada: ":: TELAR · GENTLE-AI ::"
-    let banner = if is_preview {
-        ":: TELAR [Preview] · GENTLE-AI ::"
-    } else {
-        ":: TELAR · GENTLE-AI ::"
-    };
-    let banner_len = banner.chars().count() as u16;
-    let banner_x = x + (width.saturating_sub(banner_len)) / 2;
-    buffer.set_stringn(
-        banner_x,
-        y,
-        banner,
-        banner_len as usize,
-        Style::default().fg(config.palette.overlay0),
-    );
-
-    let mut cur_y = y + 1;
+    let rail_w = width.saturating_sub(1);
+    let mut cur_y = y;
     let bottom_limit = y + rows;
 
-    // 1. Tarjeta: Status (Workspace, Agent, Modelo, Mem, Engram, MCP) (Sección 1)
-    if config.right_dock_show_state && cur_y < bottom_limit {
+    // 0. Modo preview indicador discreto
+    if is_preview && cur_y < bottom_limit {
+        buffer.set_stringn(
+            x + 1,
+            cur_y,
+            "[Preview Mode]",
+            rail_w as usize,
+            Style::default().fg(config.palette.yellow),
+        );
+        cur_y += 1;
+    }
+
+    // 1. SECCIÓN: TODOS (Sección 1)
+    if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(1);
-        let badge = if is_col { "[+]" } else { "[-]" };
+        let done_count = status_tab.telemetry.todos.iter().filter(|t| t.is_done).count();
+        let total_count = status_tab.telemetry.todos.len();
+        let count_tag = format!("{done_count}/{total_count}");
+
+        render_panel_header_rail(
+            buffer,
+            x + 1,
+            cur_y,
+            rail_w,
+            "TODOS",
+            Some(&count_tag),
+            !is_col,
+            header_style,
+            tag_style,
+            hits.as_deref_mut(),
+            Some(1),
+        );
+        cur_y += 1;
+
+        if !is_col {
+            for todo in &status_tab.telemetry.todos {
+                if cur_y >= bottom_limit.saturating_sub(1) {
+                    break;
+                }
+                let bullet = if todo.is_in_progress {
+                    "• "
+                } else if todo.is_done {
+                    "✓ "
+                } else {
+                    "○ "
+                };
+                let bullet_style = if todo.is_in_progress {
+                    Style::default().fg(config.palette.mauve)
+                } else if todo.is_done {
+                    Style::default().fg(config.palette.green)
+                } else {
+                    Style::default().fg(config.palette.overlay0)
+                };
+                let text_style = if todo.is_in_progress {
+                    Style::default().fg(config.palette.mauve)
+                } else if todo.is_done {
+                    Style::default().fg(config.palette.subtext0)
+                } else {
+                    val_text
+                };
+
+                buffer.set_string(x + 2, cur_y, bullet, bullet_style);
+                let title_x = x + 4;
+                let max_w = (rail_w.saturating_sub(4)) as usize;
+                buffer.set_stringn(title_x, cur_y, &todo.title, max_w, text_style);
+                cur_y += 1;
+            }
+            cur_y += 1; // Espacio vertical entre bloques
+        }
+    }
+
+    // 2. SECCIÓN: AGENTS (Sección 2)
+    if cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(2);
         let agent_st = context
             .and_then(|c| c.agent_status)
             .filter(|s| *s != crate::api::schema::AgentStatus::Unknown)
             .map(super::status_text)
-            .unwrap_or("unavailable");
+            .unwrap_or("idle");
 
-        let header_title = if is_col {
-            if config.right_dock_show_git {
-                format!("Status: {ws_name} ({branch_name}) · {agent_st}")
-            } else {
-                format!("Status: {ws_name} · {agent_st}")
-            }
-        } else if agent_st != "unavailable" && agent_st != "idle" {
-            format!("Status · {agent_st}")
+        let agents_running_tag = if agent_st == "working" {
+            "2 running".to_string()
         } else {
-            "Status".to_string()
+            agent_st.to_string()
         };
-        let card_h = if is_col {
-            1
-        } else {
-            7u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header_title,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(1),
-            );
 
-            if !is_col && card_h >= 4 {
-                let body_x = x + 2;
-                let mut row_offset = 1;
+        render_panel_header_rail(
+            buffer,
+            x + 1,
+            cur_y,
+            rail_w,
+            "AGENTS",
+            Some(&agents_running_tag),
+            !is_col,
+            header_style,
+            tag_style,
+            hits.as_deref_mut(),
+            Some(2),
+        );
+        cur_y += 1;
 
-                // Fila 1: Project ~/projects/... ◇ main
-                let display_path = if let Some(ctx) = context {
-                    let p = ctx.root_path.to_string_lossy();
-                    if let Ok(home) = std::env::var("HOME") {
-                        if let Some(rest) = p.strip_prefix(&home) {
-                            format!("~{rest}")
-                        } else {
-                            p.to_string()
-                        }
-                    } else {
-                        p.to_string()
-                    }
-                } else {
-                    format!("~/projects/{ws_name}")
-                };
-                let proj_line = if config.right_dock_show_git {
-                    format!("Project  {display_path}  ◇ {branch_name}")
-                } else {
-                    format!("Project  {display_path}")
-                };
-                buffer.set_stringn(
-                    body_x,
-                    cur_y + row_offset,
-                    proj_line,
-                    inner_w as usize,
-                    val_text,
-                );
-                row_offset += 1;
+        if !is_col {
+            let agent_disp = context
+                .and_then(|c| c.agent_name)
+                .unwrap_or("pi");
 
-                // Fila 2: Model <model_name>
-                if cur_y + row_offset < bottom_limit {
-                    render_card_kv(
+            if agent_st == "working" {
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
                         buffer,
-                        body_x,
-                        cur_y + row_offset,
-                        inner_w,
-                        "Model    ",
-                        &status_tab.telemetry.model_name,
-                        key_style,
-                        val_accent,
-                    );
-                    row_offset += 1;
-                }
-
-                // Fila 3: Divisor horizontal ──────
-                if cur_y + row_offset < bottom_limit && card_h >= 5 {
-                    for col in body_x..(body_x + inner_w) {
-                        if let Some(cell) = buffer.cell_mut((col, cur_y + row_offset)) {
-                            cell.set_symbol("─");
-                            cell.set_style(Style::default().fg(config.palette.surface_dim));
-                        }
-                    }
-                    row_offset += 1;
-                }
-
-                // Fila 4: ◆ engram · ready (7437) • En linea · 27 ob
-                if cur_y + row_offset < bottom_limit && card_h >= 6 {
-                    let engram_line = format!(
-                        "◆ engram · ready ({}) • En linea · {} ob",
-                        status_tab.telemetry.engram.port,
-                        status_tab.telemetry.engram.observations_count
-                    );
-                    buffer.set_stringn(
-                        body_x,
-                        cur_y + row_offset,
-                        engram_line,
-                        inner_w as usize,
-                        Style::default().fg(config.palette.green),
-                    );
-                    row_offset += 1;
-                }
-
-                // Fila 5: ◆ MCP: 3 activos · context7, engram, open-design
-                if cur_y + row_offset < bottom_limit && card_h >= 7 {
-                    let mcp_names: Vec<&str> = status_tab.telemetry.mcp_servers.iter().map(|s| s.name.as_str()).collect();
-                    let mcp_names_str = if mcp_names.is_empty() {
-                        "ninguno".to_string()
-                    } else {
-                        mcp_names.join(", ")
-                    };
-                    let mcp_line = format!(
-                        "◆ MCP: {} activos · {}",
-                        status_tab.telemetry.mcp_servers.len(),
-                        mcp_names_str
-                    );
-                    buffer.set_stringn(
-                        body_x,
-                        cur_y + row_offset,
-                        mcp_line,
-                        inner_w as usize,
-                        Style::default().fg(config.palette.teal),
-                    );
-                }
-            }
-            cur_y += card_h;
-        }
-    }
-
-    // 2. Tarjeta: Contexto y Tokens (Sección 2)
-    if config.right_dock_show_context && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(2);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let tokens_val = context
-            .and_then(|c| c.agent_tokens)
-            .and_then(|tokens| {
-                tokens.iter().find_map(|(k, v)| {
-                    if k.contains("token") || k.contains("context") {
-                        Some(v.as_str())
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or("179.2k");
-        let header_title = if is_col {
-            format!("Contexto: {tokens_val} ({:.0}%)", status_tab.telemetry.context.percent)
-        } else {
-            "Contexto".to_string()
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            4u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header_title,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(2),
-            );
-
-            if !is_col && card_h >= 3 {
-                let body_x = x + 2;
-                let line = format!(
-                    "Context:   {tokens_val} / 1.0M  • {}",
-                    status_tab.telemetry.context.status_label
-                );
-                let status_style = if status_tab.telemetry.context.percent > 80.0 {
-                    Style::default().fg(config.palette.red)
-                } else if status_tab.telemetry.context.percent > 50.0 {
-                    Style::default().fg(config.palette.yellow)
-                } else {
-                    Style::default().fg(config.palette.green)
-                };
-                buffer.set_stringn(
-                    body_x,
-                    cur_y + 1,
-                    line,
-                    inner_w as usize,
-                    status_style,
-                );
-
-                if cur_y + 2 < bottom_limit {
-                    let bar_color = if status_tab.telemetry.context.percent > 80.0 {
-                        config.palette.red
-                    } else if status_tab.telemetry.context.percent > 50.0 {
-                        config.palette.yellow
-                    } else {
-                        config.palette.teal
-                    };
-                    render_mini_bar(
-                        buffer,
-                        body_x,
-                        cur_y + 2,
-                        inner_w,
-                        status_tab.telemetry.context.percent as u8,
-                        Style::default().fg(bar_color),
-                        Style::default().fg(config.palette.surface0),
-                    );
-                }
-
-                if cur_y + 3 < bottom_limit {
-                    let cost_line = format!(
-                        "^ 1.0M · v 14.4k   Costo ${:.3}",
-                        status_tab.telemetry.context.cost
-                    );
-                    buffer.set_stringn(
-                        body_x,
-                        cur_y + 3,
-                        cost_line,
-                        inner_w as usize,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "• ",
+                        &format!("{agent_disp} (Permisos e integraciones)"),
+                        Some("explore 97k 37s"),
+                        Style::default().fg(config.palette.mauve),
+                        Style::default().fg(config.palette.mauve),
                         val_dim,
                     );
+                    cur_y += 1;
+                }
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "• ",
+                        "Desarrollo y automatización",
+                        Some("explore 100k 37s"),
+                        Style::default().fg(config.palette.mauve),
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "✓ ",
+                        "1 done",
+                        Some("/gentle:agents"),
+                        Style::default().fg(config.palette.green),
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                    cur_y += 1;
+                }
+            } else {
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        "none running",
+                        Some("/gentle:agents"),
+                        key_style,
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                    cur_y += 1;
                 }
             }
-            cur_y += card_h;
+            cur_y += 1;
         }
     }
 
-    // 3. Tarjeta: ~ Proyecto (Sección 3)
-    if config.right_dock_show_state && cur_y < bottom_limit {
+    // 3. SECCIÓN: CHANGES (Sección 3)
+    if config.right_dock_show_git && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(3);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let header = if is_col {
-            format!("Proyecto: {ws_name} ({}d)", status_tab.telemetry.project_days)
+        let files_changed = status_tab.telemetry.git.agent_files_changed;
+        let changes_tag = if branch_name != "unavailable" {
+            if files_changed == 0 {
+                format!("{branch_name} · clean")
+            } else {
+                format!("{branch_name} · {files_changed} files")
+            }
+        } else if files_changed == 0 {
+            "clean".to_string()
         } else {
-            format!("Proyecto · {ws_name} {}d", status_tab.telemetry.project_days)
+            format!("{files_changed} files")
         };
-        let card_h = if is_col {
-            1
-        } else {
-            3u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(3),
-            );
-            if !is_col && card_h >= 2 {
-                let body_x = x + 2;
-                render_card_kv(
+
+        render_panel_header_rail(
+            buffer,
+            x + 1,
+            cur_y,
+            rail_w,
+            "CHANGES",
+            Some(&changes_tag),
+            !is_col,
+            header_style,
+            tag_style,
+            hits.as_deref_mut(),
+            Some(3),
+        );
+        cur_y += 1;
+
+        if !is_col {
+            if cur_y < bottom_limit {
+                if files_changed == 0 {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        "no captured changes",
+                        Some("/gentle:changes"),
+                        key_style,
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                } else {
+                    let diff_str = format!("+{} −{}", status_tab.telemetry.git.agent_lines_added, status_tab.telemetry.git.modified_count);
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        &diff_str,
+                        Some("/gentle:changes"),
+                        key_style,
+                        Style::default().fg(config.palette.green),
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                }
+                cur_y += 1;
+            }
+            cur_y += 1;
+        }
+    }
+
+    // 4. SECCIÓN: STATS (Sección 4)
+    if cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(4);
+        let stats = &status_tab.telemetry.live_stats;
+        let cost_tag = format!("${:.3} sub", stats.spent_cost);
+
+        render_panel_header_rail(
+            buffer,
+            x + 1,
+            cur_y,
+            rail_w,
+            "STATS",
+            Some(&cost_tag),
+            !is_col,
+            header_style,
+            tag_style,
+            hits.as_deref_mut(),
+            Some(4),
+        );
+        cur_y += 1;
+
+        if !is_col {
+            // spent
+            if cur_y < bottom_limit {
+                let spent_str = format!("${:.3} sub", stats.spent_cost);
+                let right_turns = format!("{} turns · {}", stats.turns, stats.elapsed_str);
+                render_panel_kv_rail(
                     buffer,
-                    body_x,
-                    cur_y + 1,
-                    inner_w,
-                    "Workspace: ",
-                    ws_name,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "spent   ",
+                    &spent_str,
+                    Some(&right_turns),
                     key_style,
                     val_text,
-                );
-            }
-            cur_y += card_h;
-        }
-    }
-
-    // 4. Tarjeta: CPAMC / Integraciones (Sección 4)
-    if config.right_dock_show_cpamc && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(4);
-        let badge = if is_col { "[+]" } else { "[-]" };
-
-        match config.cpamc_experience {
-            crate::config::CpamcExperienceConfig::AutoSwitcher => {
-                let pool_name = context.and_then(|c| c.agent_name).unwrap_or("Gemini");
-                let header_title = if is_col {
-                    format!("Pool: {pool_name} · 5h (0% libre)")
-                } else {
-                    format!("Pool: {pool_name} · ○ Esperando")
-                };
-                let card_h = if is_col {
-                    1
-                } else {
-                    6u16.min(bottom_limit.saturating_sub(cur_y))
-                };
-                if card_h >= 1 {
-                    draw_card_box(
-                        buffer,
-                        x + 1,
-                        cur_y,
-                        card_w,
-                        card_h,
-                        &header_title,
-                        badge,
-                        card_border_style,
-                        card_title_style,
-                        card_badge_style,
-                        hits.as_deref_mut(),
-                        Some(4),
-                    );
-
-                    if !is_col && card_h >= 4 {
-                        let body_x = x + 2;
-                        buffer.set_stringn(
-                            body_x,
-                            cur_y + 1,
-                            "5 HORAS:   Quedan 5h 0m (0% libre)",
-                            inner_w as usize,
-                            val_text,
-                        );
-                        if cur_y + 2 < bottom_limit {
-                            render_mini_bar(
-                                buffer,
-                                body_x,
-                                cur_y + 2,
-                                inner_w,
-                                35,
-                                Style::default().fg(config.palette.teal),
-                                Style::default().fg(config.palette.surface0),
-                            );
-                        }
-                        if cur_y + 3 < bottom_limit {
-                            buffer.set_stringn(
-                                body_x,
-                                cur_y + 3,
-                                "SEMANAL:   0% 7d 0h",
-                                inner_w as usize,
-                                val_dim,
-                            );
-                        }
-                        if cur_y + 4 < bottom_limit {
-                            buffer.set_stringn(
-                                body_x,
-                                cur_y + 4,
-                                "🛡 Centinela · ● En guardia",
-                                inner_w as usize,
-                                Style::default().fg(config.palette.green),
-                            );
-                        }
-                    }
-                    cur_y += card_h;
-                }
-            }
-            crate::config::CpamcExperienceConfig::Totopo27 => {
-                let count = status_tab.telemetry.accounts.len();
-                let header_title = if is_col {
-                    format!("Cuentas: {count} activas")
-                } else {
-                    format!("CPAMC · {count} cuentas")
-                };
-                let card_h = if is_col {
-                    1
-                } else {
-                    4u16.min(bottom_limit.saturating_sub(cur_y))
-                };
-                if card_h >= 1 {
-                    draw_card_box(
-                        buffer,
-                        x + 1,
-                        cur_y,
-                        card_w,
-                        card_h,
-                        &header_title,
-                        badge,
-                        card_border_style,
-                        card_title_style,
-                        card_badge_style,
-                        hits.as_deref_mut(),
-                        Some(4),
-                    );
-
-                    if !is_col && card_h >= 3 {
-                        let body_x = x + 2;
-                        render_card_kv(
-                            buffer,
-                            body_x,
-                            cur_y + 1,
-                            inner_w,
-                            "Cuenta:    ",
-                            "activa",
-                            key_style,
-                            val_text,
-                        );
-                        render_card_kv(
-                            buffer,
-                            body_x,
-                            cur_y + 2,
-                            inner_w,
-                            "Cuota 5h:  ",
-                            "100% libre",
-                            key_style,
-                            val_accent,
-                        );
-                    }
-                    cur_y += card_h;
-                }
-            }
-        }
-    }
-
-    // 5. Tarjeta: SDD Mono-modelo (Sección 5)
-    if cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(5);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let header = if is_col {
-            format!("SDD: {} · {} mod", status_tab.telemetry.active_account, status_tab.telemetry.model_quotas.len())
-        } else {
-            format!("SDD · {}", status_tab.telemetry.active_account)
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            (status_tab.telemetry.model_quotas.len() as u16 + 2)
-                .min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(5),
-            );
-            if !is_col && card_h >= 3 {
-                let body_x = x + 2;
-                for (idx, mq) in status_tab.telemetry.model_quotas.iter().enumerate() {
-                    let row_y = cur_y + 1 + idx as u16;
-                    if row_y >= bottom_limit.saturating_sub(1) {
-                        break;
-                    }
-                    let line = format!(
-                        "• {:<11} ─── {:>5} {}",
-                        mq.model_name, mq.indicator, mq.reset_in
-                    );
-                    buffer.set_stringn(
-                        body_x,
-                        row_y,
-                        line,
-                        inner_w as usize,
-                        Style::default().fg(config.palette.teal),
-                    );
-                }
-            }
-            cur_y += card_h;
-        }
-    }
-
-    // 6. Tarjeta: Cambios · Git (Sección 6)
-    if config.right_dock_show_git && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(6);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let header = if is_col {
-            format!("Git: limpio ({branch_name}) · ag: {}", status_tab.telemetry.git.agent_files_changed)
-        } else {
-            format!("Git · {} archivos ag", status_tab.telemetry.git.agent_files_changed)
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            5u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(6),
-            );
-
-            if !is_col && card_h >= 3 {
-                let body_x = x + 2;
-                let row1 = format!(
-                    "{} * {} mod · ?{}",
-                    branch_name,
-                    status_tab.telemetry.git.modified_count,
-                    status_tab.telemetry.git.untracked_count
-                );
-                buffer.set_stringn(
-                    body_x,
-                    cur_y + 1,
-                    row1,
-                    inner_w as usize,
-                    val_text,
-                );
-
-                if cur_y + 2 < bottom_limit {
-                    let head_line = format!(
-                        "* {} (HEAD -> {})",
-                        status_tab
-                            .telemetry
-                            .git
-                            .head_commit
-                            .as_deref()
-                            .unwrap_or(""),
-                        branch_name
-                    );
-                    buffer.set_stringn(
-                        body_x,
-                        cur_y + 2,
-                        head_line,
-                        inner_w as usize,
-                        val_dim,
-                    );
-                }
-                if cur_y + 3 < bottom_limit {
-                    let git_val =
-                        if let Some((ahead, behind)) = context.and_then(|c| c.git_ahead_behind) {
-                            format!("+{ahead}/-{behind}")
-                        } else if branch_name == "unavailable" {
-                            "unavailable".to_string()
-                        } else {
-                            "unavailable".to_string()
-                        };
-                    let git_status_text = if git_val == "unavailable" {
-                        "Git:       unavailable".to_string()
-                    } else {
-                        format!(
-                            "git: limpio   ag: {} archivos (+{})",
-                            status_tab.telemetry.git.agent_files_changed,
-                            status_tab.telemetry.git.agent_lines_added
-                        )
-                    };
-                    buffer.set_stringn(
-                        body_x,
-                        cur_y + 3,
-                        git_status_text,
-                        inner_w as usize,
-                        Style::default().fg(config.palette.green),
-                    );
-                }
-            }
-            cur_y += card_h;
-        }
-    }
-
-    // 7. Tarjeta: Engram (Sección 7)
-    if config.right_dock_show_engram && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(7);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let header = if is_col {
-            format!("Engram: {} · {} obs", status_tab.telemetry.engram.project_name, status_tab.telemetry.engram.observations_count)
-        } else {
-            format!("Engram · {}", status_tab.telemetry.engram.project_name)
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            3u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(7),
-            );
-
-            if !is_col && card_h >= 2 {
-                let body_x = x + 2;
-                let engram_port = format!("Local ({})  ", status_tab.telemetry.engram.port);
-                let port_w = engram_port.chars().count() as u16;
-                buffer.set_stringn(body_x, cur_y + 1, engram_port, port_w as usize, val_text);
-                if body_x + port_w < buffer.area.right() {
-                    buffer.set_stringn(
-                        body_x + port_w,
-                        cur_y + 1,
-                        "• En linea",
-                        10,
-                        Style::default().fg(config.palette.green),
-                    );
-                    let obs_str = format!(" · {} ob", status_tab.telemetry.engram.observations_count);
-                    if body_x + port_w + 10 < buffer.area.right() {
-                        buffer.set_stringn(
-                            body_x + port_w + 10,
-                            cur_y + 1,
-                            obs_str,
-                            inner_w.saturating_sub(port_w + 10) as usize,
-                            val_dim,
-                        );
-                    }
-                }
-                if cur_y + 2 < bottom_limit {
-                    let cloud_line = format!("Cloud: {}", status_tab.telemetry.engram.cloud_status);
-                    buffer.set_stringn(body_x, cur_y + 2, cloud_line, inner_w as usize, val_dim);
-                }
-            }
-            cur_y += card_h;
-        }
-    }
-
-    // 8. Tarjeta: Tools (Sección 8)
-    if config.right_dock_show_tools && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(8);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let header = if is_col {
-            format!("Tools: {} llamadas · r:{} w:{}", status_tab.telemetry.tools.total_calls, status_tab.telemetry.tools.reads, status_tab.telemetry.tools.writes)
-        } else {
-            format!("Tools · {} llamadas", status_tab.telemetry.tools.total_calls)
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            3u16.min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(8),
-            );
-
-            if !is_col && card_h >= 2 {
-                let body_x = x + 2;
-                let line = format!(
-                    "@ {} lecturas  @ {} escritur  mem: {}",
-                    status_tab.telemetry.tools.reads,
-                    status_tab.telemetry.tools.writes,
-                    status_tab.telemetry.tools.memory_ops
-                );
-                buffer.set_stringn(
-                    body_x,
-                    cur_y + 1,
-                    line,
-                    inner_w as usize,
                     val_dim,
                 );
+                cur_y += 1;
             }
-            cur_y += card_h;
+
+            // tokens
+            if cur_y < bottom_limit {
+                let in_k = format!("in {}k", stats.tokens_in / 1000);
+                let out_k = format!("out {:.1}k", stats.tokens_out as f32 / 1000.0);
+                let tok_str = format!("{in_k} · {out_k}");
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "tokens  ",
+                    &tok_str,
+                    None,
+                    key_style,
+                    val_text,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            // cache
+            if cur_y < bottom_limit {
+                let cache_str = format!("{}% hit · {}k read", stats.cache_hit_percent, stats.cache_read_tokens / 1000);
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "cache   ",
+                    &cache_str,
+                    None,
+                    key_style,
+                    val_text,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            // tools
+            if cur_y < bottom_limit {
+                let tools_str = if stats.tool_failures > 0 {
+                    format!("{} calls · {} failed", stats.tool_calls, stats.tool_failures)
+                } else {
+                    format!("{} calls", stats.tool_calls)
+                };
+                let tool_val_style = if stats.tool_failures > 0 {
+                    Style::default().fg(config.palette.yellow)
+                } else {
+                    val_text
+                };
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "tools   ",
+                    &tools_str,
+                    None,
+                    key_style,
+                    tool_val_style,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            // agents
+            if cur_y < bottom_limit {
+                let ag_str = format!("{} runs · {}k · ${:.3} sub", stats.subagent_runs, stats.subagent_tokens / 1000, stats.subagent_cost);
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "agents  ",
+                    &ag_str,
+                    None,
+                    key_style,
+                    val_text,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            // model breakdown
+            if cur_y < bottom_limit {
+                let mod_desc = format!("{} turns · {}k · ${:.3} sub", stats.model_turns, stats.model_tokens / 1000, stats.model_cost);
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "",
+                    &stats.model_name,
+                    Some(&mod_desc),
+                    key_style,
+                    val_accent,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            cur_y += 1;
         }
     }
 
-    // 9. Tarjeta: MCP (Sección 9)
-    if config.right_dock_show_mcp && cur_y < bottom_limit {
-        let is_col = status_tab.is_collapsed(9);
-        let badge = if is_col { "[+]" } else { "[-]" };
-        let count = status_tab.telemetry.mcp_servers.len();
-        let header = if is_col {
-            format!("MCP: {count} activos")
-        } else {
-            format!("MCP · {count} activos")
-        };
-        let card_h = if is_col {
-            1
-        } else {
-            (count as u16 + 2).min(bottom_limit.saturating_sub(cur_y))
-        };
-        if card_h >= 1 {
-            draw_card_box(
-                buffer,
-                x + 1,
-                cur_y,
-                card_w,
-                card_h,
-                &header,
-                badge,
-                card_border_style,
-                card_title_style,
-                card_badge_style,
-                hits.as_deref_mut(),
-                Some(9),
-            );
+    // 5. SECCIÓN: INTEGRATIONS (Sección 5)
+    if cur_y < bottom_limit {
+        let is_col = status_tab.is_collapsed(5);
+        let mcp_count = status_tab.telemetry.mcp_servers.len().max(2);
+        let int_count_str = mcp_count.to_string();
 
-            if !is_col && card_h >= 3 {
-                let body_x = x + 2;
-                for (idx, srv) in status_tab.telemetry.mcp_servers.iter().enumerate() {
-                    let row_y = cur_y + 1 + idx as u16;
-                    if row_y >= bottom_limit.saturating_sub(1) {
-                        break;
-                    }
-                    let name_str = format!("• {:<12}", srv.name);
-                    buffer.set_stringn(body_x, row_y, name_str, 14, val_text);
-                    let scope_str = format!("[{}]", srv.scope);
-                    if body_x + 14 < buffer.area.right() {
-                        buffer.set_stringn(body_x + 14, row_y, scope_str, 10, key_style);
-                    }
-                    let status_x = body_x + inner_w.saturating_sub(srv.status.chars().count() as u16);
-                    if status_x > body_x + 20 {
-                        let st_style = if srv.status.contains("linea") || srv.status.contains("línea") || srv.status.contains("online") {
-                            Style::default().fg(config.palette.green)
-                        } else {
-                            val_dim
-                        };
-                        buffer.set_string(status_x, row_y, &srv.status, st_style);
-                    }
-                }
+        render_panel_header_rail(
+            buffer,
+            x + 1,
+            cur_y,
+            rail_w,
+            "INTEGRATIONS",
+            Some(&int_count_str),
+            !is_col,
+            header_style,
+            tag_style,
+            hits.as_deref_mut(),
+            Some(5),
+        );
+        cur_y += 1;
+
+        if !is_col {
+            if cur_y < bottom_limit {
+                let profile_str = format!("Agent profile: {}", status_tab.telemetry.model_name);
+                buffer.set_stringn(x + 2, cur_y, profile_str, rail_w.saturating_sub(2) as usize, val_dim);
+                cur_y += 1;
             }
-            cur_y += card_h;
+
+            if cur_y < bottom_limit {
+                buffer.set_stringn(
+                    x + 2,
+                    cur_y,
+                    "- permissions no permission prompts; private",
+                    rail_w.saturating_sub(2) as usize,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+            if cur_y < bottom_limit {
+                buffer.set_stringn(
+                    x + 4,
+                    cur_y,
+                    "paths stay blocked",
+                    rail_w.saturating_sub(4) as usize,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            if cur_y < bottom_limit {
+                let obs_id = status_tab.telemetry.engram.observations_count;
+                let mem_str = format!("- 🧠 {ws_name} · ✓ saved #{obs_id}");
+                buffer.set_stringn(
+                    x + 2,
+                    cur_y,
+                    mem_str,
+                    rail_w.saturating_sub(2) as usize,
+                    Style::default().fg(config.palette.mauve),
+                );
+                cur_y += 1;
+            }
+
+            cur_y += 1;
         }
     }
 
-    // 10. Footer de atajos rápidos de navegación al final si queda espacio
-    if bottom_limit.saturating_sub(cur_y) >= 2 {
-        let footer_y = bottom_limit.saturating_sub(2);
+    // 6. FOOTER CANÓNICO GENTLE SHELL
+    if bottom_limit.saturating_sub(cur_y) >= 1 {
+        let footer_y = bottom_limit.saturating_sub(1);
         buffer.set_stringn(
             x + 1,
             footer_y,
-            "1-9: colapsar · c: plegar todo",
-            card_w as usize,
-            val_dim,
-        );
-        buffer.set_stringn(
-            x + 1,
-            footer_y + 1,
-            "d: expandir · s: sync · q: salir",
-            card_w as usize,
+            "ctrl+shift+t todos · alt+u usage · / commands",
+            rail_w as usize,
             val_dim,
         );
     }
@@ -2533,58 +2103,47 @@ mod tests {
     }
 
     #[test]
-    fn status_renders_rounded_card_boxes_and_banner() {
+    fn status_renders_rail_sections_and_footer() {
         let config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 40, 25);
+        let area = Rect::new(0, 0, 45, 30);
         let mut buffer = Buffer::empty(area);
         let mut status_tab = StatusTab::default();
+        let context = WorkspaceContext {
+            workspace_id: "one",
+            workspace_name: "telar",
+            root_path: Path::new("/"),
+            branch: Some("main"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: Some(crate::api::schema::AgentStatus::Working),
+            agent_name: Some("pi"),
+            agent_tokens: None,
+            siblings: Vec::new(),
+        };
         render_status_content(
             &mut buffer,
             0,
             0,
-            25,
-            40,
+            30,
+            45,
             &config,
-            None,
+            Some(&context),
             &mut status_tab,
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains(":: TELAR · GENTLE-AI ::"));
-        assert!(text.contains('╭'));
-        assert!(text.contains('╰'));
-        assert!(text.contains('│'));
-        assert!(text.contains('─'));
-        assert!(text.contains("[-]"));
+        assert!(text.contains("TODOS"));
+        assert!(text.contains("AGENTS"));
+        assert!(text.contains("CHANGES"));
+        assert!(text.contains("STATS"));
+        assert!(text.contains("INTEGRATIONS"));
+        assert!(text.contains("ctrl+shift+t todos"));
     }
 
     #[test]
-    fn status_does_not_show_fabricated_jobs_or_todos() {
+    fn status_shows_workspace_agent_and_stats() {
         let config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 50, 10);
-        let mut buffer = Buffer::empty(area);
-        let mut status_tab = StatusTab::default();
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            10,
-            50,
-            &config,
-            None,
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("Jobs (0 running)"));
-        assert!(!text.contains("Todos (100% idle)"));
-        assert!(text.contains("unavailable"));
-    }
-
-    #[test]
-    fn status_shows_workspace_agent_and_branch_without_guessing_git_state() {
-        let config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 30);
+        let area = Rect::new(0, 0, 50, 30);
         let mut buffer = Buffer::empty(area);
         let context = WorkspaceContext {
             workspace_id: "one",
@@ -2604,7 +2163,7 @@ mod tests {
             0,
             0,
             30,
-            60,
+            50,
             &config,
             Some(&context),
             &mut status_tab,
@@ -2612,15 +2171,15 @@ mod tests {
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("telar"));
-        assert!(text.contains("working"));
-        assert!(text.contains("main"));
-        assert!(text.contains("unavailable"));
+        assert!(text.contains("2 running"));
+        assert!(text.contains("spent"));
+        assert!(text.contains("tokens"));
     }
 
     #[test]
     fn status_sections_can_be_hidden_independently() {
         let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 30);
+        let area = Rect::new(0, 0, 50, 30);
         let context = WorkspaceContext {
             workspace_id: "one",
             workspace_name: "project-one",
@@ -2633,243 +2192,67 @@ mod tests {
             agent_tokens: None,
             siblings: Vec::new(),
         };
-        config.right_dock_show_state = false;
-        let mut buffer = Buffer::empty(area);
-        let mut status_tab = StatusTab::default();
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            30,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("project-one"));
-        assert!(text.contains("branch-one"));
-        config.right_dock_show_state = true;
         config.right_dock_show_git = false;
         let mut buffer = Buffer::empty(area);
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            30,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("project-one"));
-        assert!(!text.contains("branch-one"));
-    }
-
-    #[test]
-    fn status_renders_engram_and_context_cards_and_honors_visibility() {
-        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 45);
-        let context = WorkspaceContext {
-            workspace_id: "one",
-            workspace_name: "test-ws",
-            root_path: Path::new("/"),
-            branch: Some("main"),
-            git_ahead_behind: None,
-            is_preview: false,
-            agent_status: None,
-            agent_name: None,
-            agent_tokens: None,
-            siblings: Vec::new(),
-        };
-        let mut buffer = Buffer::empty(area);
-        let mut status_tab = StatusTab::default();
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            45,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("Engram"));
-        assert!(text.contains("Context"));
-
-        config.right_dock_show_engram = false;
-        config.right_dock_show_context = false;
-        let mut buffer = Buffer::empty(area);
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            45,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("ENGRAM"));
-        assert!(!text.contains("Context"));
-    }
-
-    #[test]
-    fn status_renders_cpamc_experience_variants() {
-        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 25);
-        let context = WorkspaceContext {
-            workspace_id: "one",
-            workspace_name: "test-ws",
-            root_path: Path::new("/"),
-            branch: Some("main"),
-            git_ahead_behind: None,
-            is_preview: false,
-            agent_status: None,
-            agent_name: Some("Gemini"),
-            agent_tokens: None,
-            siblings: Vec::new(),
-        };
-        // AutoSwitcher mode
-        config.cpamc_experience = crate::config::CpamcExperienceConfig::AutoSwitcher;
-        let mut buffer = Buffer::empty(area);
-        let mut status_tab = StatusTab::default();
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            25,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("Pool: Gemini"));
-        assert!(text.contains("Centinela"));
-        assert!(text.contains("5 HORAS"));
-
-        // Totopo27 mode
-        config.cpamc_experience = crate::config::CpamcExperienceConfig::Totopo27;
-        let mut buffer = Buffer::empty(area);
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            25,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("CPAMC"));
-        assert!(text.contains("cuentas"));
-        assert!(!text.contains("Centinela"));
-
-        // Disabled
-        config.right_dock_show_cpamc = false;
-        let mut buffer = Buffer::empty(area);
-        render_status_content(
-            &mut buffer,
-            0,
-            0,
-            25,
-            60,
-            &config,
-            Some(&context),
-            &mut status_tab,
-            None,
-        );
-        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("Pool:"));
-        assert!(!text.contains("CPAMC / Cuentas"));
-    }
-
-    #[test]
-    fn status_renders_tools_and_mcp_cards_and_honors_visibility() {
-        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
-        let area = Rect::new(0, 0, 60, 30);
-        let context = WorkspaceContext {
-            workspace_id: "one",
-            workspace_name: "test-ws",
-            root_path: Path::new("/"),
-            branch: Some("main"),
-            git_ahead_behind: None,
-            is_preview: false,
-            agent_status: None,
-            agent_name: None,
-            agent_tokens: None,
-            siblings: Vec::new(),
-        };
-        let mut buffer = Buffer::empty(area);
         let mut status_tab = StatusTab::default();
         render_status_content(
             &mut buffer,
             0,
             0,
             30,
-            60,
+            50,
             &config,
             Some(&context),
             &mut status_tab,
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("Tools"));
-        assert!(text.contains("MCP"));
+        assert!(!text.contains("CHANGES"));
 
-        config.right_dock_show_tools = false;
-        config.right_dock_show_mcp = false;
+        config.right_dock_show_git = true;
         let mut buffer = Buffer::empty(area);
         render_status_content(
             &mut buffer,
             0,
             0,
             30,
-            60,
+            50,
             &config,
             Some(&context),
             &mut status_tab,
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("• TOOLS"));
-        assert!(!text.contains("• MCP"));
+        assert!(text.contains("CHANGES"));
     }
 
     #[test]
     fn test_status_tab_collapse_toggle_and_shortcuts() {
         let mut status = StatusTab::default();
-        // Por defecto sección 3 (Proyecto) y 5 (SDD) están colapsadas
-        assert!(status.is_collapsed(3));
-        assert!(status.is_collapsed(5));
+        // Por defecto todas las secciones están expandidas en el rail Gentle Shell
         assert!(!status.is_collapsed(1));
+        assert!(!status.is_collapsed(3));
+        assert!(!status.is_collapsed(5));
 
-        // Alternar colapso de sección 1 (Estado)
+        // Alternar colapso de sección 1
         status.toggle_section(1);
         assert!(status.is_collapsed(1));
         status.toggle_section(1);
         assert!(!status.is_collapsed(1));
 
+        // Alternar colapso de sección 3
+        status.toggle_section(3);
+        assert!(status.is_collapsed(3));
+
         // Colapsar todo
         status.collapse_all();
-        for s in 1..=9 {
+        for s in 1..=5 {
             assert!(status.is_collapsed(s));
         }
 
         // Expandir todo
         status.expand_all();
-        for s in 1..=9 {
+        for s in 1..=5 {
             assert!(!status.is_collapsed(s));
         }
     }
@@ -3425,11 +2808,11 @@ mod tests {
         );
 
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("Status"));
-        assert!(text.contains("Project"));
-        assert!(text.contains("main"));
-        assert!(text.contains("Model"));
-        assert!(text.contains("engram · ready"));
-        assert!(text.contains("MCP: 3 activos"));
+        assert!(text.contains("TODOS"));
+        assert!(text.contains("AGENTS"));
+        assert!(text.contains("CHANGES"));
+        assert!(text.contains("STATS"));
+        assert!(text.contains("INTEGRATIONS"));
+        assert!(text.contains("investigaciones"));
     }
 }

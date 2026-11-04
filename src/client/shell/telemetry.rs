@@ -114,8 +114,60 @@ pub struct McpServerTelemetry {
     pub is_online: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionTodoItem {
+    pub title: String,
+    pub is_done: bool,
+    pub is_in_progress: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionLiveStats {
+    pub spent_cost: f32,
+    pub turns: usize,
+    pub elapsed_str: String,
+    pub tokens_in: u64,
+    pub tokens_out: u64,
+    pub cache_hit_percent: u8,
+    pub cache_read_tokens: u64,
+    pub tool_calls: usize,
+    pub tool_failures: usize,
+    pub subagent_runs: usize,
+    pub subagent_tokens: u64,
+    pub subagent_cost: f32,
+    pub model_name: String,
+    pub model_turns: usize,
+    pub model_tokens: u64,
+    pub model_cost: f32,
+}
+
+impl Default for SessionLiveStats {
+    fn default() -> Self {
+        Self {
+            spent_cost: 0.154,
+            turns: 13,
+            elapsed_str: "7m44s".to_string(),
+            tokens_in: 46_000,
+            tokens_out: 1_900,
+            cache_hit_percent: 90,
+            cache_read_tokens: 434_000,
+            tool_calls: 8,
+            tool_failures: 0,
+            subagent_runs: 3,
+            subagent_tokens: 343_000,
+            subagent_cost: 0.141,
+            model_name: "gpt-6.1-sol".to_string(),
+            model_turns: 13,
+            model_tokens: 481_000,
+            model_cost: 0.154,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct StatusSnapshot {
+    pub todos: Vec<SessionTodoItem>,
+    pub live_stats: SessionLiveStats,
     pub model_name: String,
     pub active_account: String,
     pub project_days: usize,
@@ -229,6 +281,29 @@ impl Default for StatusSnapshot {
             git: GitSummary::default(),
             engram: EngramTelemetry::default(),
             tools: ToolStats::default(),
+            todos: vec![
+                SessionTodoItem {
+                    title: "Revisar interfaz y funcionalidades cotidianas con el subagente 1".into(),
+                    is_done: false,
+                    is_in_progress: true,
+                },
+                SessionTodoItem {
+                    title: "Revisar desarrollo, agentes y automatización".into(),
+                    is_done: false,
+                    is_in_progress: false,
+                },
+                SessionTodoItem {
+                    title: "Revisar permisos, memoria e integraciones".into(),
+                    is_done: false,
+                    is_in_progress: false,
+                },
+                SessionTodoItem {
+                    title: "Contrastar los tres informes y resumir funciones".into(),
+                    is_done: false,
+                    is_in_progress: false,
+                },
+            ],
+            live_stats: SessionLiveStats::default(),
             mcp_servers: vec![
                 McpServerTelemetry {
                     name: "context7".into(),
