@@ -867,6 +867,26 @@ impl ClientShellState {
                             outcome.repaint = true;
                         }
                     }
+                    KeyCode::Char('w') | KeyCode::Char('W') => {
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
+                            if let Some((dir_path, dir_name)) = self.right_dock_state.files_tab.selected_dir_path() {
+                                self.push_endpoint_method(
+                                    crate::api::schema::Method::WorkspaceCreate(
+                                        crate::api::schema::WorkspaceCreateParams {
+                                            source_workspace_id: self.workspace_action_id(),
+                                            cwd: Some(dir_path.to_string_lossy().to_string()),
+                                            focus: true,
+                                            label: Some(dir_name),
+                                            env: Default::default(),
+                                        },
+                                    ),
+                                    outcome,
+                                );
+                                self.mode = ClientShellMode::Terminal;
+                                outcome.repaint = true;
+                            }
+                        }
+                    }
                     KeyCode::Char('.') => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.toggle_hidden();

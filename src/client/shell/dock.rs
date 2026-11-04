@@ -228,6 +228,8 @@ pub struct FileTreeEntry {
     pub is_expanded: bool,
 }
 
+const MAX_TREE_ENTRIES: usize = 1000;
+
 fn scan_tree_dir(
     root: &Path,
     rel_dir: &Path,
@@ -236,7 +238,7 @@ fn scan_tree_dir(
     show_hidden: bool,
     entries: &mut Vec<FileTreeEntry>,
 ) {
-    if depth > 20 {
+    if depth > 20 || entries.len() >= MAX_TREE_ENTRIES {
         return;
     }
     let target_dir = if rel_dir.as_os_str().is_empty() {
@@ -251,6 +253,9 @@ fn scan_tree_dir(
 
     let mut items = Vec::new();
     for entry in dir_entries.flatten() {
+        if entries.len() + items.len() >= MAX_TREE_ENTRIES {
+            break;
+        }
         let name = entry.file_name().to_string_lossy().to_string();
         if name == ".git" {
             continue;
@@ -453,6 +458,17 @@ impl FilesTab {
         let indices = self.filtered_indices();
         let &real_idx = indices.get(self.selected_index)?;
         self.entries.get(real_idx)
+    }
+
+    /// Retorna la ruta completa y el nombre del directorio seleccionado (útil para abrir como nuevo Space)
+    pub fn selected_dir_path(&self) -> Option<(PathBuf, String)> {
+        let entry = self.selected_entry()?;
+        if !entry.is_dir {
+            return None;
+        }
+        let root = self.cached_root.as_ref()?;
+        let full_path = root.join(&entry.relative_path);
+        Some((full_path, entry.name.clone()))
     }
 
     pub fn set_selected_expanded(&mut self, expanded: bool) {
@@ -1631,7 +1647,7 @@ fn render_files_content(
             "[.:NoDot]"
         };
         format!(
-            "• EXPLORER ({}/{}) [Space=Peek] {}",
+            "• EXPLORER ({}/{}) [w:Space Space:Peek] {}",
             files_tab.selected_index + 1,
             files_tab.entries.len(),
             hidden_tag
@@ -1665,10 +1681,19 @@ fn render_files_content(
                 Style::default().fg(config.palette.subtext0),
             );
         } else {
+            let msg = if let Some(root) = &files_tab.cached_root {
+                if !root.exists() {
+                    "(inaccessible or disconnected)"
+                } else {
+                    "(no files)"
+                }
+            } else {
+                "(no files)"
+            };
             buffer.set_string(
                 x + 1,
                 y + 2,
-                "(no files)",
+                msg,
                 Style::default().fg(config.palette.subtext0),
             );
         }
@@ -2814,5 +2839,121 @@ mod tests {
         assert!(text.contains("STATS"));
         assert!(text.contains("INTEGRATIONS"));
         assert!(text.contains("investigaciones"));
+    }
+
+    #[test]
+    fn test_selected_dir_path_extracts_directory_for_workspace_creation() {
+        let root = TreeFixture::new();
+        let sub_dir = root.0.join("subproject-alpha");
+        std::fs::create_dir_all(&sub_dir).unwrap();
+        std::fs::write(root.0.join("readme.md"), "# Hello").unwrap();
+
+        let mut dock = RightDockState::default();
+        dock.files_tab.refresh_if_needed(&root.0);
+
+        // Encontrar índice del directorio
+        let dir_idx = dock
+            .files_tab
+            .entries
+            .iter()
+            .position(|e| e.name == "subproject-alpha")
+            .expect("subproject directory must exist in tree");
+        dock.files_tab.selected_index = dir_idx;
+
+        let (path, name) = dock
+            .files_tab
+            .selected_dir_path()
+            .expect("must return directory path and name");
+        assert_eq!(path, sub_dir);
+        assert_eq!(name, "subproject-alpha");
+
+        // Encontrar índice del archivo
+        let file_idx = dock
+            .files_tab
+            .entries
+            .iter()
+            .position(|e| e.name == "readme.md")
+            .expect("readme file must exist in tree");
+        dock.files_tab.selected_index = file_idx;
+        assert_eq!(
+            dock.files_tab.selected_dir_path(),
+            None,
+            "selecting a file must return None for directory path"
+        );
+    }
+
+    #[test]
+    fn test_inaccessible_root_renders_gracefully() {
+        let fake_path = PathBuf::from("/nonexistent/remote/path/192.168.10.150/projects");
+        let mut dock = RightDockState::default();
+        dock.select_tab(DockTabId::Files);
+        dock.files_tab.refresh_if_needed(&fake_path);
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buffer = Buffer::empty(area);
+        let mut hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_files_content(
+            &mut buffer,
+            0,
+            0,
+            10,
+            40,
+            &config,
+            &mut dock.files_tab,
+            &mut hits,
+        );
+
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("(inaccessible or disconnected)"));
+    }
+
+    #[test]
+    fn test_dock_files_w_key_creates_workspace_for_selected_directory() {
+        use crate::client::shell::state::{ClientShellAction, ClientShellInput, ClientShellMode, ClientShellState};
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let root = TreeFixture::new();
+        let sub_dir = root.0.join("remote-app");
+        std::fs::create_dir_all(&sub_dir).unwrap();
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+        state.set_snapshot(Box::new(crate::client::shell::tests::snapshot()));
+        state.right_dock_state.active_tab = DockTabId::Files;
+        state.right_dock_state.files_tab.refresh_if_needed(&root.0);
+
+        // Seleccionar el subdirectorio
+        let dir_idx = state
+            .right_dock_state
+            .files_tab
+            .entries
+            .iter()
+            .position(|e| e.name == "remote-app")
+            .expect("remote-app directory should exist");
+        state.right_dock_state.files_tab.selected_index = dir_idx;
+        state.mode = ClientShellMode::RightDock;
+
+        let mut outcome = ClientShellInput::default();
+        state.handle_key(
+            KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE).into(),
+            &mut outcome,
+        );
+
+        assert_eq!(state.mode, ClientShellMode::Terminal);
+        let has_workspace_create = outcome.actions.iter().any(|action| {
+            if let ClientShellAction::Endpoint { request, .. } = action {
+                if let crate::api::schema::Method::WorkspaceCreate(params) = &request.method {
+                    return params.label.as_deref() == Some("remote-app")
+                        && params.cwd.as_deref() == Some(sub_dir.to_string_lossy().as_ref());
+                }
+            }
+            false
+        });
+        assert!(
+            has_workspace_create,
+            "pressing 'w' on a directory must dispatch WorkspaceCreate for that folder"
+        );
     }
 }
