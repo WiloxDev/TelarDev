@@ -117,7 +117,7 @@ pub(crate) fn render_collapsed_sidebar(
             divider_y,
             workspace_area.width,
             &"─".repeat(workspace_area.width as usize),
-            Style::default().fg(palette.overlay0),
+            Style::default().fg(palette.surface_dim),
         );
     }
 

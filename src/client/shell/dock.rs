@@ -693,7 +693,7 @@ pub(super) fn render_right_dock(
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
-            cell.set_style(Style::default().fg(config.palette.overlay0));
+            cell.set_style(Style::default().fg(config.palette.surface_dim));
         }
     }
 
