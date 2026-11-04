@@ -930,6 +930,7 @@ pub(crate) struct ClientShellState {
     pub(super) reveal_mobile_workspace: bool,
     pub(super) mobile_switcher_suspended: bool,
     pub(super) reveal_focused_tab: bool,
+    pub(super) reveal_focused_agent: bool,
     pub(super) last_tab_bar_width: Option<u16>,
     pub(super) last_composed_size: Option<(u16, u16)>,
     pub(super) last_composed_at: Option<std::time::Instant>,
@@ -1112,6 +1113,7 @@ impl ClientShellState {
             reveal_mobile_workspace: false,
             mobile_switcher_suspended: false,
             reveal_focused_tab: true,
+            reveal_focused_agent: true,
             last_tab_bar_width: None,
             last_composed_size: None,
             last_composed_at: None,
@@ -1302,6 +1304,7 @@ impl ClientShellState {
         self.reveal_mobile_workspace = false;
         self.mobile_switcher_suspended = false;
         self.reveal_focused_tab = true;
+        self.reveal_focused_agent = true;
         self.last_tab_bar_width = None;
         self.last_composed_size = None;
         self.last_composed_at = None;
@@ -1487,6 +1490,14 @@ impl ClientShellState {
                 != snapshot.focused_tab_id.as_deref()
         {
             self.reveal_focused_tab = true;
+        }
+        if self
+            .snapshot
+            .as_deref()
+            .and_then(|current| current.focused_pane_id.as_deref())
+            != snapshot.focused_pane_id.as_deref()
+        {
+            self.reveal_focused_agent = true;
         }
         let selection_focus_lost = if let Some(gesture) = self.word_selection_gesture.as_mut() {
             let focused_pane = snapshot.focused_pane_id.as_deref();

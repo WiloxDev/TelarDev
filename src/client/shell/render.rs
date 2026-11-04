@@ -247,6 +247,7 @@ pub(super) struct ShellRenderState<'a> {
     pub(super) tab_scroll: &'a mut usize,
     pub(super) reveal_focused_workspace: &'a mut bool,
     pub(super) reveal_focused_tab: &'a mut bool,
+    pub(super) reveal_focused_agent: &'a mut bool,
     pub(super) sidebar_collapsed: bool,
     pub(super) sidebar_section_split: f32,
     pub(super) tab_drag_insert_index: Option<usize>,
@@ -360,7 +361,51 @@ pub(super) fn render_shell(
             let root_str = active_pane_cwd.unwrap_or(&ws.new_workspace_cwd);
             let focused_agent = snapshot.panes.iter()
                 .find(|pane| pane.workspace_id == ws.workspace_id && pane.focused)
-                .and_then(|pane| snapshot.agents.iter().find(|agent| agent.pane_id == pane.pane_id && agent.workspace_id == ws.workspace_id));
+                .and_then(|pane| snapshot.agents.iter().find(|agent| agent.pane_id == pane.pane_id && agent.workspace_id == ws.workspace_id))
+                .or_else(|| {
+                    if is_preview {
+                        snapshot.agents.iter().find(|agent| agent.workspace_id == ws.workspace_id)
+                    } else {
+                        None
+                    }
+                });
+
+            // Detectar hermanos del mismo repositorio (worktrees vinculados o workspaces que comparten git root)
+            let current_git_dir = super::telemetry::resolve_git_dir(std::path::Path::new(root_str));
+            let mut siblings = Vec::new();
+
+            if let Some(ref my_git) = current_git_dir {
+                for other_ws in &snapshot.workspaces {
+                    if other_ws.workspace_id == ws.workspace_id {
+                        continue;
+                    }
+                    let other_root = std::path::Path::new(&other_ws.new_workspace_cwd);
+                    if let Some(other_git) = super::telemetry::resolve_git_dir(other_root) {
+                        // Si comparten el mismo admin de git o apuntan a worktrees del mismo repositorio
+                        let same_repo = my_git == &other_git
+                            || my_git.starts_with(&other_git)
+                            || other_git.starts_with(my_git)
+                            || (my_git.to_string_lossy().contains("/worktrees/") && other_git.to_string_lossy().contains("/worktrees/"));
+
+                        if same_repo {
+                            let sib_agent = snapshot.panes.iter()
+                                .find(|p| p.workspace_id == other_ws.workspace_id && p.focused)
+                                .and_then(|p| snapshot.agents.iter().find(|a| a.pane_id == p.pane_id && a.workspace_id == other_ws.workspace_id))
+                                .or_else(|| snapshot.agents.iter().find(|a| a.workspace_id == other_ws.workspace_id));
+
+                            siblings.push(super::dock::SiblingWorkspaceContext {
+                                workspace_id: &other_ws.workspace_id,
+                                workspace_name: &other_ws.label,
+                                root_path: other_root,
+                                branch: other_ws.branch.as_deref(),
+                                agent_status: sib_agent.map(|a| a.agent_status),
+                                agent_name: sib_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
+                            });
+                        }
+                    }
+                }
+            }
+
             super::dock::WorkspaceContext {
                 workspace_id: &ws.workspace_id,
                 workspace_name: &ws.label,
@@ -371,6 +416,7 @@ pub(super) fn render_shell(
                 agent_name: focused_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
                 agent_tokens: focused_agent.map(|a| a.tokens.as_slice()),
                 is_preview,
+                siblings,
             }
         });
 

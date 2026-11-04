@@ -1682,3 +1682,90 @@ fn semantic_notifications_use_client_policy_and_stable_navigation_targets() {
     assert!(state.visible_notification.is_none());
     assert_eq!(state.pending_notifications.len(), 1);
 }
+
+#[test]
+fn agent_row_disambiguates_multiple_agents_in_same_workspace_and_formats_task() {
+    let mut projected = snapshot();
+    let mut second_pane = projected.panes[0].clone();
+    second_pane.pane_id = "pane_2".into();
+    second_pane.focused = false;
+    projected.panes.push(second_pane);
+    projected.agents = vec![
+        ClientShellAgent {
+            pane_id: "pane_1".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_1".into(),
+            name: None,
+            display_agent: None,
+            agent: Some("pi".into()),
+            title: None,
+            terminal_title: Some("pi: investigating sidebar".into()),
+            terminal_title_stripped: Some("pi: investigating sidebar".into()),
+            agent_status: AgentStatus::Working,
+            state_change_seq: 1,
+            state_labels: Vec::new(),
+            tokens: vec![("model".into(), "claude-3-5".into())],
+            focused: true,
+        },
+        ClientShellAgent {
+            pane_id: "pane_2".into(),
+            workspace_id: "ws_1".into(),
+            tab_id: "tab_1".into(),
+            name: None,
+            display_agent: None,
+            agent: Some("pi".into()),
+            title: None,
+            terminal_title: None,
+            terminal_title_stripped: None,
+            agent_status: AgentStatus::Idle,
+            state_change_seq: 2,
+            state_labels: Vec::new(),
+            tokens: Vec::new(),
+            focused: false,
+        },
+    ];
+
+    let config = ClientShellConfig::from_config(&Config::default());
+    let row1 = super::agent_sidebar::agent_row(&projected, "pane_1", &config, None).expect("row 1");
+    let row2 = super::agent_sidebar::agent_row(&projected, "pane_2", &config, None).expect("row 2");
+
+    let row1_tab = row1.rows[0].iter().find_map(|token| match &token.kind {
+        crate::ui::ResolvedTokenKind::Tab(t) => Some(t.as_str()),
+        _ => None,
+    });
+    assert_eq!(row1_tab, Some("#1"));
+
+    let row1_agent = row1.rows[1].iter().find_map(|token| match &token.kind {
+        crate::ui::ResolvedTokenKind::Agent(a) => Some(a.as_str()),
+        _ => None,
+    });
+    assert_eq!(row1_agent, Some("pi • investigating sidebar [claude-3-5]"));
+
+    let row2_tab = row2.rows[0].iter().find_map(|token| match &token.kind {
+        crate::ui::ResolvedTokenKind::Tab(t) => Some(t.as_str()),
+        _ => None,
+    });
+    assert_eq!(row2_tab, Some("#2"));
+
+    let row2_agent = row2.rows[1].iter().find_map(|token| match &token.kind {
+        crate::ui::ResolvedTokenKind::Agent(a) => Some(a.as_str()),
+        _ => None,
+    });
+    assert_eq!(row2_agent, Some("pi"));
+}
+
+#[test]
+fn workspace_display_label_disambiguates_duplicate_workspaces() {
+    let mut projected = snapshot();
+    let mut second_ws = projected.workspaces[0].clone();
+    second_ws.workspace_id = "ws_2".into();
+    second_ws.number = 2;
+    second_ws.focused = false;
+    projected.workspaces.push(second_ws);
+
+    let label1 = super::sidebar::workspace_display_label(&projected, &projected.workspaces[0], false);
+    let label2 = super::sidebar::workspace_display_label(&projected, &projected.workspaces[1], false);
+
+    assert_eq!(label1, "client-shell");
+    assert_eq!(label2, "client-shell (2)");
+}

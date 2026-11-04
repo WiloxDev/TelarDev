@@ -1458,7 +1458,12 @@ fn client_settings_sidebar_section_toggles_and_persists() {
     state.handle_input_bytes(b"\r");
     assert!(!state.config.right_dock_show_mcp);
 
-    // Navigate to option 8: CPAMC Mode, and toggle to Totopo27
+    // Navigate to option 8: Git Flow, and toggle
+    state.handle_input_bytes(b"j");
+    state.handle_input_bytes(b"\r");
+    assert!(!state.config.right_dock_show_git_flow);
+
+    // Navigate to option 9: CPAMC Mode, and toggle to Totopo27
     state.handle_input_bytes(b"j");
     state.handle_input_bytes(b"\r");
     assert_eq!(

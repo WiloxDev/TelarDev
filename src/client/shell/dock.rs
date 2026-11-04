@@ -56,6 +56,16 @@ impl DockTabId {
     }
 }
 
+/// Contexto de un workspace hermano que comparte el mismo repositorio base Git
+pub struct SiblingWorkspaceContext<'a> {
+    pub workspace_id: &'a str,
+    pub workspace_name: &'a str,
+    pub root_path: &'a Path,
+    pub branch: Option<&'a str>,
+    pub agent_status: Option<crate::api::schema::AgentStatus>,
+    pub agent_name: Option<&'a str>,
+}
+
 /// Contexto del workspace activo provisto por referencia en cada frame (Punto 7)
 pub struct WorkspaceContext<'a> {
     pub workspace_id: &'a str,
@@ -67,6 +77,7 @@ pub struct WorkspaceContext<'a> {
     pub agent_name: Option<&'a str>,
     pub agent_tokens: Option<&'a [(String, String)]>,
     pub is_preview: bool,
+    pub siblings: Vec<SiblingWorkspaceContext<'a>>,
 }
 
 /// Estado del modal flotante Quick Peek (Punto 6)
@@ -568,10 +579,12 @@ impl GitFlowTab {
         root: &Path,
         branch: Option<&str>,
         ahead_behind: Option<(usize, usize)>,
+        siblings: &[SiblingWorkspaceContext],
     ) {
         if !self.is_dirty
             && self.cached_root.as_deref() == Some(root)
             && self.last_branch.as_deref() == branch
+            && self.canvas.sibling_sessions.len() == siblings.len()
         {
             return;
         }
@@ -579,7 +592,40 @@ impl GitFlowTab {
         self.cached_root = Some(root.to_path_buf());
         self.last_branch = branch.map(|s| s.to_string());
         self.ahead_behind = ahead_behind;
-        self.canvas = super::telemetry::build_live_git_flow_snapshot(root, branch, ahead_behind);
+        let mut snapshot = super::telemetry::build_live_git_flow_snapshot(root, branch, ahead_behind);
+
+        // Poblar sesiones hermanas desde siblings
+        let mut sibling_flows = Vec::new();
+        for sib in siblings {
+            let sib_branch = sib.branch.unwrap_or("main");
+            let sib_working_files = super::telemetry::read_git_working_tree_files(sib.root_path);
+            let sib_recent_commits = super::telemetry::read_git_recent_commits(sib.root_path, 1);
+            let sib_committed_files = super::telemetry::read_git_last_commit_files(sib.root_path);
+
+            sibling_flows.push(super::git_flow::WorktreeSessionFlow {
+                workspace_id: sib.workspace_id.to_string(),
+                workspace_name: sib.workspace_name.to_string(),
+                branch: sib_branch.to_string(),
+                is_focused: false,
+                agent_name: sib.agent_name.map(|n| n.to_string()),
+                agent_status: sib.agent_status,
+                last_commits: sib_recent_commits,
+                committed_files: sib_committed_files,
+                working_files: sib_working_files,
+                pr_info: None,
+            });
+        }
+
+        // Radar de conflictos en caliente entre la sesión activa y las sesiones hermanas
+        let mut all_sessions = Vec::new();
+        if let Some(active) = &snapshot.active_session {
+            all_sessions.push(active.clone());
+        }
+        all_sessions.extend(sibling_flows.clone());
+        snapshot.cross_session_conflicts = super::git_flow::detect_cross_session_conflicts(&all_sessions);
+        snapshot.sibling_sessions = sibling_flows;
+
+        self.canvas = snapshot;
         self.is_dirty = false;
     }
 }
@@ -964,6 +1010,7 @@ pub(super) fn render_right_dock(
                         ctx.root_path,
                         ctx.branch,
                         ctx.git_ahead_behind,
+                        &ctx.siblings,
                     );
                 }
                 render_git_flow_content(
@@ -2143,7 +2190,7 @@ fn render_git_flow_content(
     rows: u16,
     width: u16,
     config: &ClientShellConfig,
-    context: Option<&WorkspaceContext>,
+    _context: Option<&WorkspaceContext>,
     git_flow_tab: &mut GitFlowTab,
 ) {
     if rows < 3 || width < 15 || y >= buffer.area.bottom() || x >= buffer.area.right() {
@@ -2153,8 +2200,8 @@ fn render_git_flow_content(
     let actual_w = width.min(buffer.area.right().saturating_sub(x));
     let bottom_limit = y + rows;
 
-    // 1. Cabecera superior fija: "◆ GIT FLOW & REPO STATE (LIVE)"
-    let title = "◆ GIT FLOW & REPO STATE (LIVE)";
+    // 1. Cabecera superior fija: "◆ GIT FLOW & WORKTREE MAP (LIVE)"
+    let title = "◆ GIT FLOW & WORKTREE MAP (LIVE)";
     let title_style = Style::default()
         .fg(config.palette.blue)
         .add_modifier(ratatui::style::Modifier::BOLD);
@@ -2166,7 +2213,8 @@ fn render_git_flow_content(
     }
 
     // TOP indicator
-    buffer.set_string(x + 1, top_y, "TOP", Style::default().fg(config.palette.overlay0));
+    let base_br = &git_flow_tab.canvas.base_branch;
+    buffer.set_string(x + 1, top_y, &format!("TOP (Base {base_br})"), Style::default().fg(config.palette.overlay0));
     if actual_w > 8 {
         buffer.set_string(x + actual_w.saturating_sub(6), top_y, "▲ OOT", Style::default().fg(config.palette.blue));
     }
@@ -2174,115 +2222,118 @@ fn render_git_flow_content(
     // Preparar líneas visuales del riel continuo
     let mut visual_lines: Vec<(String, Style)> = Vec::new();
 
-    let cur_branch = context.and_then(|c| c.branch).unwrap_or("main");
-    let (ahead, _) = context.and_then(|c| c.git_ahead_behind).unwrap_or((2, 0));
-
-    for step in &git_flow_tab.canvas.steps {
-        match step {
-            super::git_flow::GitFlowStep::Commit { hash, branch: _, message: _, files, upstream } => {
-                let f_str = if files.is_empty() { "D".into() } else { files.join(" ") };
-                visual_lines.push((
-                    format!("01 COMMIT ▶ ● {hash} (HEAD: {cur_branch}) [{f_str}] ──> {upstream}"),
-                    Style::default().fg(config.palette.blue),
-                ));
-                visual_lines.push((
-                    "             📄 📄 📄 📄 📄".to_string(),
-                    Style::default().fg(config.palette.overlay0),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Branch { name, .. } => {
-                visual_lines.push((
-                    format!("02 BRANCH ▶ ╭─── {name} (ahead +{ahead})"),
-                    Style::default().fg(config.palette.peach),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Stash { index, file_hint } => {
-                visual_lines.push((
-                    format!("06 STASH  ├──┄┄┄● [{file_hint}] ──> 📥 📦 stash@{{{index}}}"),
-                    Style::default().fg(config.palette.green),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Tag { name, target_ref } => {
-                visual_lines.push((
-                    format!("07 TAG    ▶ ● 🏷️ {name} (anclado a {target_ref})"),
-                    Style::default().fg(config.palette.yellow),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Rebase { commit, .. } => {
-                visual_lines.push((
-                    "04 REBASE   ● A  ───────────┤ reaplicado en main".to_string(),
-                    Style::default().fg(config.palette.peach),
-                ));
-                visual_lines.push((
-                    format!("            ● B  ┄┄┄┄┄┄┄┄┄┄─┤ {commit}"),
-                    Style::default().fg(config.palette.peach),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::CherryPick { commit_hash, note } => {
-                visual_lines.push((
-                    format!("05 CHERRY-  ╭─● {commit_hash} {note}"),
-                    Style::default().fg(config.palette.teal),
-                ));
-                visual_lines.push(("   PICK     │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Merge { branch, .. } => {
-                visual_lines.push((
-                    format!("            ● git merge {branch} | commit de merge"),
-                    Style::default().fg(config.palette.peach),
-                ));
-                visual_lines.push((
-                    "03 MERGE  ◀──╯".to_string(),
-                    Style::default().fg(config.palette.overlay0),
-                ));
-                visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::Fork { upstream_repo, my_repo, .. } => {
-                visual_lines.push((
-                    format!("08 FORK   ───● ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ [{upstream_repo}] ───> [{my_repo}]"),
-                    Style::default().fg(config.palette.blue),
-                ));
-                visual_lines.push((
-                    "             │                     ○───────────────○────●".to_string(),
-                    Style::default().fg(config.palette.overlay0),
-                ));
-            }
-            super::git_flow::GitFlowStep::PullRequest { number, title, delta, approved } => {
-                let status_icon = if *approved { "✓ Approved" } else { "Review required" };
-                visual_lines.push((
-                    format!("09 PULL     ╭─● ⑂ PR #{number} ({title}) [+{}/-{}] {status_icon}", delta.0, delta.1),
-                    Style::default().fg(config.palette.green),
-                ));
-                visual_lines.push(("   REQUEST  │".to_string(), Style::default().fg(config.palette.overlay0)));
-            }
-            super::git_flow::GitFlowStep::StackedPrs { prs, current_pr } => {
-                let chain: Vec<String> = prs.iter().map(|p| {
-                    if *p == *current_pr {
-                        format!("[#{p}]")
-                    } else {
-                        format!("#{p}")
-                    }
-                }).collect();
-                let stack_str = chain.join(" ──> ");
-                visual_lines.push((
-                    "10 STACKED  ● ╭── STACKED PRs ────────────────────────────────────╮".to_string(),
-                    Style::default().fg(config.palette.blue),
-                ));
-                visual_lines.push((
-                    format!("              │ ≡ Stack: {stack_str}"),
-                    Style::default().fg(config.palette.text),
-                ));
-                visual_lines.push((
-                    "              ╰───────────────────────────────────────────────────╯".to_string(),
-                    Style::default().fg(config.palette.blue),
-                ));
-            }
-        }
+    // 0. Radar de Conflicto Cruzado en Caliente (si dos agentes tocan el mismo archivo)
+    if !git_flow_tab.canvas.cross_session_conflicts.is_empty() {
+        let files_str = git_flow_tab.canvas.cross_session_conflicts.join(", ");
+        visual_lines.push((
+            format!("⚠️ ALERTA: Conflicto en caliente ({files_str})"),
+            Style::default().fg(config.palette.red).add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+        visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.red)));
     }
+
+    // 1. Render de la Sesión Activa Enfocada (Detalle completo: Commits + Sección en Trabajo)
+    if let Some(active_sess) = &git_flow_tab.canvas.active_session {
+        let agent_label = active_sess.agent_name.as_deref().unwrap_or("pi");
+        let branch_name = &active_sess.branch;
+
+        visual_lines.push((
+            format!("├───╮ 🌲 WORKTREE [{branch_name}]"),
+            Style::default().fg(config.palette.peach).add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+        visual_lines.push((
+            format!("│   ├─▶ [SESIÓN ACTIVA: {agent_label}]"),
+            Style::default().fg(config.palette.blue).add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+
+        // Commits guardados recientes
+        for (sha, msg) in &active_sess.last_commits {
+            let msg_short = if msg.len() > 22 {
+                format!("{}…", &msg[..21])
+            } else {
+                msg.clone()
+            };
+            visual_lines.push((
+                format!("│   ●  {sha} [COMMIT] {msg_short}"),
+                Style::default().fg(config.palette.blue),
+            ));
+        }
+
+        // Archivos congelados en commit anterior
+        if !active_sess.committed_files.is_empty() {
+            let cf_str = active_sess.committed_files.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            visual_lines.push((
+                format!("│       └─📂 {cf_str}"),
+                Style::default().fg(config.palette.overlay0),
+            ));
+        }
+
+        // Sección EN TRABAJO EN VIVO (archivos modificados ahora mismo)
+        if !active_sess.working_files.is_empty() {
+            let wf_str = active_sess.working_files.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let count = active_sess.working_files.len();
+            visual_lines.push((
+                format!("│   ⚡ [EN TRABAJO VIVO] ({count} mod)"),
+                Style::default().fg(config.palette.peach).add_modifier(ratatui::style::Modifier::BOLD),
+            ));
+            visual_lines.push((
+                format!("│       └─✏️ {wf_str}"),
+                Style::default().fg(config.palette.peach),
+            ));
+        } else {
+            visual_lines.push((
+                "│   ✓ [working tree clean]".to_string(),
+                Style::default().fg(config.palette.green),
+            ));
+        }
+
+        // Estado de PR asociado si existe
+        if let Some((pr_num, pr_title, pr_app)) = &active_sess.pr_info {
+            let app_str = if *pr_app { "Approved" } else { "Review" };
+            visual_lines.push((
+                format!("│   └───> ↗ PR #{pr_num} ({pr_title}) [{app_str}]"),
+                Style::default().fg(config.palette.green),
+            ));
+        }
+
+        visual_lines.push(("│   │".to_string(), Style::default().fg(config.palette.overlay0)));
+    }
+
+    // 2. Render de Sesiones Secundarias / Worktrees Hermanos (Doble Carril en Paralelo)
+    for sibling in &git_flow_tab.canvas.sibling_sessions {
+        let agent_label = sibling.agent_name.as_deref().unwrap_or("pi");
+        let branch_name = &sibling.branch;
+        let st_icon = match sibling.agent_status {
+            Some(crate::api::schema::AgentStatus::Working) => "🟠 working",
+            Some(crate::api::schema::AgentStatus::Blocked) => "🔴 blocked",
+            _ => "🟢 idle",
+        };
+
+        visual_lines.push((
+            format!("├───┬─▶ [SESIÓN HERMANA: {agent_label}] {st_icon}"),
+            Style::default().fg(config.palette.teal).add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+        visual_lines.push((
+            format!("│   │   Rama: {branch_name}"),
+            Style::default().fg(config.palette.subtext0),
+        ));
+
+        if !sibling.working_files.is_empty() {
+            let files = sibling.working_files.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+            visual_lines.push((
+                format!("│   │   ⚡ Editando: {files}"),
+                Style::default().fg(config.palette.peach),
+            ));
+        }
+        visual_lines.push(("│   │".to_string(), Style::default().fg(config.palette.overlay0)));
+    }
+
+    // 3. Retorno proyectado hacia main
+    visual_lines.push((
+        format!("├───◀─── Retorno proyectado hacia {base_br} (git merge)"),
+        Style::default().fg(config.palette.overlay0),
+    ));
+    visual_lines.push(("│".to_string(), Style::default().fg(config.palette.overlay0)));
 
     // Viewport de renderizado
     let viewport_y = top_y + 1;
@@ -2545,6 +2596,7 @@ mod tests {
             agent_status: Some(crate::api::schema::AgentStatus::Working),
             agent_name: Some("pi"),
             agent_tokens: None,
+            siblings: Vec::new(),
         };
         let mut status_tab = StatusTab::default();
         render_status_content(
@@ -2579,6 +2631,7 @@ mod tests {
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
+            siblings: Vec::new(),
         };
         config.right_dock_show_state = false;
         let mut buffer = Buffer::empty(area);
@@ -2630,6 +2683,7 @@ mod tests {
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
+            siblings: Vec::new(),
         };
         let mut buffer = Buffer::empty(area);
         let mut status_tab = StatusTab::default();
@@ -2681,6 +2735,7 @@ mod tests {
             agent_status: None,
             agent_name: Some("Gemini"),
             agent_tokens: None,
+            siblings: Vec::new(),
         };
         // AutoSwitcher mode
         config.cpamc_experience = crate::config::CpamcExperienceConfig::AutoSwitcher;
@@ -2754,6 +2809,7 @@ mod tests {
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
+            siblings: Vec::new(),
         };
         let mut buffer = Buffer::empty(area);
         let mut status_tab = StatusTab::default();
@@ -3324,15 +3380,16 @@ mod tests {
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
+            siblings: Vec::new(),
         };
 
         render_right_dock(&mut buffer, area, &config, &mut dock, Some(&context), &mut hits);
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
 
-        assert!(text.contains("GIT FLOW & REPO STATE (LIVE)"));
+        assert!(text.contains("GIT FLOW & WORKTREE MAP (LIVE)"));
         assert!(text.contains("TOP"));
-        assert!(text.contains("01 COMMIT"));
-        assert!(text.contains("02 BRANCH"));
+        assert!(text.contains("WORKTREE"));
+        assert!(text.contains("SESIÓN ACTIVA"));
     }
 
     #[test]
@@ -3352,6 +3409,7 @@ mod tests {
             agent_status: None,
             agent_name: None,
             agent_tokens: None,
+            siblings: Vec::new(),
         };
 
         render_status_content(

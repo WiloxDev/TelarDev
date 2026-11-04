@@ -22,14 +22,23 @@ pub struct GitWorktreeInfo {
 }
 
 pub fn derive_label_from_cwd(cwd: &Path) -> String {
-    git_repo_root(cwd)
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    derive_label_from_cwd_with_home(cwd, home.as_deref())
+}
+
+pub(crate) fn derive_label_from_cwd_with_home(cwd: &Path, home: Option<&Path>) -> String {
+    git_repo_root_with_home(cwd, home)
         .map(|repo_root| automatic_workspace_label(cwd, &repo_root))
-        .unwrap_or_else(|| fallback_label_from_cwd(cwd))
+        .unwrap_or_else(|| fallback_label_from_cwd_with_home(cwd, home))
 }
 
 pub fn fallback_label_from_cwd(cwd: &Path) -> String {
-    if let Ok(home) = std::env::var("HOME") {
-        let home = Path::new(&home);
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    fallback_label_from_cwd_with_home(cwd, home.as_deref())
+}
+
+pub(crate) fn fallback_label_from_cwd_with_home(cwd: &Path, home: Option<&Path>) -> String {
+    if let Some(home) = home {
         if cwd == home {
             return "~".to_string();
         }
@@ -309,18 +318,30 @@ fn git_trimmed_stdout(repo_root: &Path, args: &[&str]) -> Option<String> {
 }
 
 pub(super) fn git_repo_root(start: &Path) -> Option<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    git_repo_root_with_home(start, home.as_deref())
+}
+
+pub(super) fn git_repo_root_with_home(start: &Path, home: Option<&Path>) -> Option<PathBuf> {
     let mut current = if start.is_dir() {
         start.to_path_buf()
     } else {
         start.parent()?.to_path_buf()
     };
 
+    let canonical_home = home.and_then(|h| std::fs::canonicalize(h).ok().or_else(|| Some(h.to_path_buf())));
+
     loop {
-        if git_dir_for_repo_root(&current)
-            .map(|git_dir| git_dir.join("HEAD").is_file())
-            .unwrap_or(false)
-        {
-            return Some(current);
+        let is_home = home.map_or(false, |h| current == h)
+            || canonical_home.as_ref().map_or(false, |h| &current == h);
+
+        if !is_home {
+            if git_dir_for_repo_root(&current)
+                .map(|git_dir| git_dir.join("HEAD").is_file())
+                .unwrap_or(false)
+            {
+                return Some(current);
+            }
         }
         if !current.pop() {
             return None;
@@ -825,5 +846,53 @@ mod tests {
         );
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn git_repo_root_ignores_incidental_git_in_home() {
+        let fake_home = temp_test_dir("fake-home");
+        std::fs::create_dir_all(fake_home.join(".git")).unwrap();
+        std::fs::write(fake_home.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+
+        let subfolder = fake_home.join("downloads");
+        std::fs::create_dir_all(&subfolder).unwrap();
+
+        assert_eq!(git_repo_root_with_home(&subfolder, Some(&fake_home)), None);
+        assert_eq!(git_repo_root_with_home(&fake_home, Some(&fake_home)), None);
+
+        std::fs::remove_dir_all(fake_home).unwrap();
+    }
+
+    #[test]
+    fn git_repo_root_finds_legitimate_parent_when_home_is_set() {
+        let fake_home = temp_test_dir("fake-home-parent");
+        let project = fake_home.join("projects").join("my-app");
+        let src = project.join("src");
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::write(project.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+        std::fs::create_dir_all(&src).unwrap();
+
+        let detected = git_repo_root_with_home(&src, Some(&fake_home));
+        assert_eq!(detected, Some(project));
+
+        std::fs::remove_dir_all(fake_home).unwrap();
+    }
+
+    #[test]
+    fn derive_label_ignores_home_git_and_uses_fallback() {
+        let fake_home = temp_test_dir("fake-home-label");
+        std::fs::create_dir_all(fake_home.join(".git")).unwrap();
+        std::fs::write(fake_home.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+
+        let subfolder = fake_home.join("documents");
+        std::fs::create_dir_all(&subfolder).unwrap();
+
+        let label = derive_label_from_cwd_with_home(&subfolder, Some(&fake_home));
+        assert_eq!(label, "documents");
+
+        let home_label = derive_label_from_cwd_with_home(&fake_home, Some(&fake_home));
+        assert_eq!(home_label, "~");
+
+        std::fs::remove_dir_all(fake_home).unwrap();
     }
 }

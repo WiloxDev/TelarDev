@@ -454,7 +454,101 @@ pub fn read_git_latest_tag(root: &std::path::Path) -> Option<String> {
     None
 }
 
+/// Extrae únicamente el nombre base del archivo para que quepa en columnas angostas (ej. "dock.rs").
+pub fn clean_file_basename(path_str: &str) -> String {
+    let path = std::path::Path::new(path_str.trim());
+    path.file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_str.to_string())
+}
+
+/// Extrae los archivos modificados en caliente en el working tree sin comandos lentos de shell.
+pub fn read_git_working_tree_files(root: &std::path::Path) -> Vec<String> {
+    let output = std::process::Command::new("git")
+        .current_dir(root)
+        .args(["status", "--porcelain", "--untracked-files=no"])
+        .output()
+        .ok();
+
+    let mut files = Vec::new();
+    if let Some(out) = output {
+        if out.status.success() {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                let trimmed = line.trim();
+                if trimmed.len() > 3 {
+                    let file_path = trimmed[3..].trim();
+                    files.push(clean_file_basename(file_path));
+                }
+            }
+        }
+    }
+    files.dedup();
+    files
+}
+
+/// Extrae los últimos commits de la rama activa: (short_sha, message).
+pub fn read_git_recent_commits(root: &std::path::Path, limit: usize) -> Vec<(String, String)> {
+    let output = std::process::Command::new("git")
+        .current_dir(root)
+        .args(["log", &format!("-n{}", limit.max(1)), "--format=%h|%s"])
+        .output()
+        .ok();
+
+    let mut commits = Vec::new();
+    if let Some(out) = output {
+        if out.status.success() {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                if let Some((sha, msg)) = line.split_once('|') {
+                    commits.push((sha.trim().to_string(), msg.trim().to_string()));
+                }
+            }
+        }
+    }
+    commits
+}
+
+/// Extrae los nombres de los archivos que formaron parte del último commit.
+pub fn read_git_last_commit_files(root: &std::path::Path) -> Vec<String> {
+    let output = std::process::Command::new("git")
+        .current_dir(root)
+        .args(["diff", "--name-only", "HEAD~1", "HEAD"])
+        .output()
+        .ok();
+
+    let mut files = Vec::new();
+    if let Some(out) = output {
+        if out.status.success() {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                let clean = line.trim();
+                if !clean.is_empty() {
+                    files.push(clean_file_basename(clean));
+                }
+            }
+        }
+    }
+    files.dedup();
+    files
+}
+
+/// Detecta dinámicamente si la rama base troncal es main, master o develop.
+pub fn detect_default_base_branch(root: &std::path::Path) -> String {
+    let Some(git_dir) = resolve_git_dir(root) else {
+        return "main".to_string();
+    };
+    let heads = git_dir.join("refs").join("heads");
+    if heads.join("main").exists() {
+        "main".to_string()
+    } else if heads.join("master").exists() {
+        "master".to_string()
+    } else if heads.join("develop").exists() {
+        "develop".to_string()
+    } else {
+        "main".to_string()
+    }
+}
+
 /// Extrae el último mensaje de commit si está disponible.
+#[allow(dead_code)]
 pub fn read_last_commit_message(root: &std::path::Path) -> Option<String> {
     let git_dir = resolve_git_dir(root)?;
     let msg_path = git_dir.join("COMMIT_EDITMSG");
@@ -539,14 +633,34 @@ pub fn build_live_git_flow_snapshot(
 
     let mut steps = Vec::new();
 
+    // Metadatos vivos de la sesión activa
+    let base_branch = detect_default_base_branch(root);
+    let recent_commits = read_git_recent_commits(root, 2);
+    let committed_files = read_git_last_commit_files(root);
+    let working_files = read_git_working_tree_files(root);
+    let pr_data = try_query_github_pr(root).map(|(num, title, _, approved, _)| (num, title, approved));
+
+    let active_session = Some(super::git_flow::WorktreeSessionFlow {
+        workspace_id: String::new(),
+        workspace_name: root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "workspace".to_string()),
+        branch: active_branch.clone(),
+        is_focused: true,
+        agent_name: Some("pi".to_string()),
+        agent_status: Some(crate::api::schema::AgentStatus::Working),
+        last_commits: recent_commits.clone(),
+        committed_files: committed_files.clone(),
+        working_files: working_files.clone(),
+        pr_info: pr_data.clone(),
+    });
+
     // 01 COMMIT
-    let commit_msg = read_last_commit_message(root).unwrap_or_else(|| "feat: commit actual".to_string());
+    let commit_msg = recent_commits.first().map(|(_, msg)| msg.clone()).unwrap_or_else(|| "feat: commit actual".to_string());
     steps.push(super::git_flow::GitFlowStep::Commit {
         hash: current_sha,
         branch: active_branch.clone(),
         message: commit_msg,
-        files: vec!["D".into(), "D".into()],
-        upstream: "origin/main".into(),
+        files: committed_files.clone(),
+        upstream: format!("origin/{base_branch}"),
     });
 
     // 02 BRANCH
@@ -634,6 +748,10 @@ pub fn build_live_git_flow_snapshot(
         steps,
         scroll_offset: 0,
         active_alert,
+        active_session,
+        sibling_sessions: Vec::new(),
+        base_branch,
+        cross_session_conflicts: Vec::new(),
     }
 }
 
@@ -661,6 +779,13 @@ mod tests {
         assert!(!snapshot.steps.is_empty());
         // Al menos commit y branch siempre existen en un repo válido
         assert!(snapshot.steps.len() >= 2);
+        assert!(snapshot.active_session.is_some());
+    }
+
+    #[test]
+    fn test_clean_file_basename_trims_paths() {
+        assert_eq!(clean_file_basename("src/client/shell/dock.rs"), "dock.rs");
+        assert_eq!(clean_file_basename("report.md"), "report.md");
     }
 }
 

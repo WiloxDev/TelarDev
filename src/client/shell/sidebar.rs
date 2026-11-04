@@ -243,7 +243,8 @@ pub(crate) fn render_sidebar(
                 .workspaces
                 .get(entry.index)
                 .map(|workspace| {
-                    workspace_rows(
+                    workspace_rows_with_snapshot(
+                        snapshot,
                         workspace,
                         displayed_workspace_status(snapshot, workspace, state.collapsed_groups),
                         entry.indented,
@@ -304,7 +305,13 @@ pub(crate) fn render_sidebar(
             continue;
         };
         let status = displayed_workspace_status(snapshot, workspace, state.collapsed_groups);
-        let rows = workspace_rows(workspace, status, entry.indented, &config.spaces);
+        let rows = workspace_rows_with_snapshot(
+            snapshot,
+            workspace,
+            status,
+            entry.indented,
+            &config.spaces,
+        );
         let row_height = (rows.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
         if y.saturating_add(row_height) > body.bottom() {
             break;
@@ -436,6 +443,7 @@ pub(crate) fn render_sidebar(
         snapshot,
         config,
         state.agent_scroll,
+        state.reveal_focused_agent,
         hits,
     );
 
@@ -660,6 +668,71 @@ pub(in crate::client::shell) fn displayed_workspace_status(
         .unwrap_or(workspace.agent_status)
 }
 
+pub(in crate::client::shell) fn workspace_display_label<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    workspace: &'a ClientShellWorkspace,
+    indented: bool,
+) -> std::borrow::Cow<'a, str> {
+    let base_label = if indented && !workspace.custom_label {
+        workspace
+            .branch
+            .as_deref()
+            .and_then(|branch| branch.strip_prefix("worktree/").or(Some(branch)))
+            .unwrap_or(&workspace.label)
+    } else {
+        &workspace.label
+    };
+
+    let duplicates = snapshot
+        .workspaces
+        .iter()
+        .filter(|w| {
+            let other_base = if indented && !w.custom_label {
+                w.branch
+                    .as_deref()
+                    .and_then(|branch| branch.strip_prefix("worktree/").or(Some(branch)))
+                    .unwrap_or(&w.label)
+            } else {
+                &w.label
+            };
+            other_base == base_label && w.branch == workspace.branch
+        })
+        .collect::<Vec<_>>();
+
+    if duplicates.len() > 1 {
+        if let Some(pos) = duplicates.iter().position(|w| w.workspace_id == workspace.workspace_id) {
+            if pos > 0 {
+                return std::borrow::Cow::Owned(format!("{base_label} ({})", pos + 1));
+            }
+        }
+    }
+
+    std::borrow::Cow::Borrowed(base_label)
+}
+
+pub(in crate::client::shell) fn workspace_rows_with_snapshot(
+    snapshot: &ClientShellSnapshot,
+    workspace: &ClientShellWorkspace,
+    status: crate::api::schema::AgentStatus,
+    indented: bool,
+    config: &SpacesSidebarConfig,
+) -> Vec<Vec<crate::ui::ResolvedToken>> {
+    let label = workspace_display_label(snapshot, workspace, indented);
+    let token_values = workspace.tokens.iter().cloned().collect::<HashMap<_, _>>();
+    crate::ui::sidebar_space_rows(
+        config,
+        crate::ui::SpaceTokenContext {
+            workspace: &label,
+            branch: workspace.branch.as_deref(),
+            state_text: status_text(status),
+            ahead_behind: workspace.git_ahead_behind,
+            tokens: &token_values,
+            suppress_git_details: indented,
+        },
+    )
+}
+
+#[allow(dead_code)]
 pub(in crate::client::shell) fn workspace_rows(
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,

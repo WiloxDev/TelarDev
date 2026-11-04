@@ -119,7 +119,7 @@ impl ClientShellState {
                 ClientSettingsSection::Indicators | ClientSettingsSection::Sound => 2,
                 ClientSettingsSection::Toast => 4,
                 ClientSettingsSection::Typography => crate::config::FONT_CATALOG.len(),
-                ClientSettingsSection::Sidebar => 9,
+                ClientSettingsSection::Sidebar => 10,
                 ClientSettingsSection::Integrations => settings.integrations.len(),
             },
             _ => 0,

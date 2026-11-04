@@ -55,6 +55,7 @@ pub(super) fn render_agent_panel(
     snapshot: &ClientShellSnapshot,
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
+    reveal_focused_agent: &mut bool,
     hits: &mut ShellHitMap,
 ) {
     if !render_agent_panel_header(
@@ -68,6 +69,11 @@ pub(super) fn render_agent_panel(
     }
 
     let rows = agent_rows(snapshot, config, None);
+    let reveal_index = if std::mem::take(reveal_focused_agent) {
+        rows.iter().position(|r| r.focused)
+    } else {
+        None
+    };
     render_agent_list(
         buffer,
         area,
@@ -78,6 +84,7 @@ pub(super) fn render_agent_panel(
             .map(|_| " no matching agents"),
         config,
         agent_scroll,
+        reveal_index,
         hits,
         |row| row.rows.len(),
         |buffer, rect, row, hits| {
@@ -158,6 +165,7 @@ pub(super) fn render_agent_list<T>(
     empty_message: Option<&str>,
     config: &ClientShellConfig,
     agent_scroll: &mut usize,
+    reveal_index: Option<usize>,
     hits: &mut ShellHitMap,
     row_lines: impl Fn(&T) -> usize,
     mut render_row: impl FnMut(&mut Buffer, Rect, &T, &mut ShellHitMap),
@@ -201,6 +209,15 @@ pub(super) fn render_agent_list<T>(
             }
         })
         .collect::<Vec<_>>();
+    if let Some(target) = reveal_index {
+        *agent_scroll = super::scroll::list_scroll_start_to_reveal(
+            &row_heights,
+            &gaps,
+            body.height,
+            *agent_scroll,
+            target,
+        );
+    }
     let metrics =
         super::scroll::list_scroll_metrics(&row_heights, &gaps, body.height, *agent_scroll);
     hits.agent_max_scroll = metrics.max_offset_from_bottom;
@@ -269,15 +286,106 @@ pub(super) fn agent_row(
         .iter()
         .filter(|candidate| candidate.workspace_id == agent.workspace_id)
         .count();
-    let tab_label = tab
-        .filter(|tab| tab_count > 1 || tab.custom_label)
-        .map(|tab| tab.label.as_str());
-    let agent_label = agent
+    let agents_in_workspace = snapshot
+        .agents
+        .iter()
+        .filter(|candidate| candidate.workspace_id == agent.workspace_id)
+        .count();
+    let pane_differentiator;
+    let tab_label = if tab_count > 1 || tab.is_some_and(|t| t.custom_label) {
+        tab.map(|tab| tab.label.as_str())
+    } else if agents_in_workspace > 1 {
+        if let Some(custom_pane) = pane.and_then(|p| p.label.as_deref()) {
+            Some(custom_pane)
+        } else {
+            let pos = snapshot
+                .agents
+                .iter()
+                .filter(|c| c.workspace_id == agent.workspace_id)
+                .position(|c| c.pane_id == agent.pane_id)
+                .unwrap_or(0);
+            pane_differentiator = format!("#{}", pos + 1);
+            Some(pane_differentiator.as_str())
+        }
+    } else {
+        None
+    };
+    let base_agent = agent
         .display_agent
         .as_deref()
         .or(agent.name.as_deref())
         .or(agent.agent.as_deref())
         .or(agent.title.as_deref());
+    let has_explicit_name = agent.display_agent.is_some() || agent.name.is_some();
+    let has_summary_token = agent.tokens.iter().any(|(k, _)| k == "summary");
+    let model_tag = agent
+        .tokens
+        .iter()
+        .find(|(k, _)| k == "model" || k == "agent_model" || k == "engine")
+        .map(|(_, v)| v.as_str());
+
+    let agent_task_label;
+    let agent_label = if let Some(base) = base_agent {
+        if !has_explicit_name && !has_summary_token {
+            let raw_title = agent
+                .terminal_title_stripped
+                .as_deref()
+                .or(agent.title.as_deref())
+                .map(str::trim)
+                .filter(|t| !t.is_empty());
+
+            let task = if let Some(title) = raw_title {
+                if title.eq_ignore_ascii_case(base) {
+                    None
+                } else {
+                    let stripped = title
+                        .strip_prefix(base)
+                        .map(|s| {
+                            let trimmed = s.trim_start();
+                            if let Some(rest) = trimmed
+                                .strip_prefix(':')
+                                .or_else(|| trimmed.strip_prefix('-'))
+                                .or_else(|| trimmed.strip_prefix('•'))
+                                .or_else(|| trimmed.strip_prefix('|'))
+                            {
+                                rest.trim()
+                            } else {
+                                trimmed
+                            }
+                        })
+                        .unwrap_or(title);
+
+                    if stripped.is_empty() || stripped.eq_ignore_ascii_case(base) {
+                        None
+                    } else {
+                        Some(stripped)
+                    }
+                }
+            } else {
+                None
+            };
+
+            match (task, model_tag) {
+                (Some(t), Some(m)) => {
+                    agent_task_label = format!("{base} • {t} [{m}]");
+                    Some(agent_task_label.as_str())
+                }
+                (Some(t), None) => {
+                    agent_task_label = format!("{base} • {t}");
+                    Some(agent_task_label.as_str())
+                }
+                (None, Some(m)) => {
+                    agent_task_label = format!("{base} [{m}]");
+                    Some(agent_task_label.as_str())
+                }
+                (None, None) => Some(base),
+            }
+        } else {
+            Some(base)
+        }
+    } else {
+        None
+    };
     let labels = agent
         .state_labels
         .iter()

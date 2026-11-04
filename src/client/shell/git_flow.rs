@@ -113,6 +113,50 @@ impl GitFlowStep {
     }
 }
 
+/// Información de flujo y avance de una sesión/worktree individual.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct WorktreeSessionFlow {
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub branch: String,
+    pub is_focused: bool,
+    pub agent_name: Option<String>,
+    pub agent_status: Option<crate::api::schema::AgentStatus>,
+    /// Últimos commits de la rama: (short_sha, message)
+    pub last_commits: Vec<(String, String)>,
+    /// Archivos congelados en el último commit
+    pub committed_files: Vec<String>,
+    /// Archivos que están siendo modificados en vivo en el working tree
+    pub working_files: Vec<String>,
+    /// Información de PR si está abierto: (número, título, aprobado)
+    pub pr_info: Option<(u32, String, bool)>,
+}
+
+/// Detecta colisiones de archivos en caliente entre dos o más sesiones que comparten el mismo repositorio.
+#[allow(dead_code)]
+pub fn detect_cross_session_conflicts(sessions: &[WorktreeSessionFlow]) -> Vec<String> {
+    if sessions.len() < 2 {
+        return Vec::new();
+    }
+    let mut seen = std::collections::HashMap::new();
+    let mut conflicts = std::collections::BTreeSet::new();
+
+    for (idx, session) in sessions.iter().enumerate() {
+        for file in &session.working_files {
+            let clean_file = file.trim();
+            if clean_file.is_empty() {
+                continue;
+            }
+            if let Some(prev_idx) = seen.insert(clean_file.to_string(), idx) {
+                if prev_idx != idx {
+                    conflicts.insert(clean_file.to_string());
+                }
+            }
+        }
+    }
+    conflicts.into_iter().collect()
+}
+
 /// Estado inmutable del canvas visual de Git Flow preparado para renderizado puro.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitFlowCanvasSnapshot {
@@ -122,6 +166,14 @@ pub struct GitFlowCanvasSnapshot {
     pub scroll_offset: usize,
     /// Mensaje de alerta o conflicto activo (si lo hubiere).
     pub active_alert: Option<String>,
+    /// Sesión principal activa enfocada.
+    pub active_session: Option<WorktreeSessionFlow>,
+    /// Sesiones secundarias o worktrees hermanos del mismo repositorio.
+    pub sibling_sessions: Vec<WorktreeSessionFlow>,
+    /// Rama base troncal detectada (ej. "main", "master", "develop").
+    pub base_branch: String,
+    /// Archivos en conflicto cruzado detectados entre agentes en caliente.
+    pub cross_session_conflicts: Vec<String>,
 }
 
 impl Default for GitFlowCanvasSnapshot {
@@ -139,6 +191,10 @@ impl GitFlowCanvasSnapshot {
             steps: Vec::new(),
             scroll_offset: 0,
             active_alert: None,
+            active_session: None,
+            sibling_sessions: Vec::new(),
+            base_branch: "main".into(),
+            cross_session_conflicts: Vec::new(),
         }
     }
 
@@ -200,6 +256,21 @@ impl GitFlowCanvasSnapshot {
             ],
             scroll_offset: 0,
             active_alert: None,
+            active_session: Some(WorktreeSessionFlow {
+                workspace_id: "one".into(),
+                workspace_name: "telar-dev".into(),
+                branch: "login".into(),
+                is_focused: true,
+                agent_name: Some("pi".into()),
+                agent_status: Some(crate::api::schema::AgentStatus::Working),
+                last_commits: vec![("5f074e5".into(), "feat: login con google".into())],
+                committed_files: vec!["dock.rs".into(), "telemetry.rs".into()],
+                working_files: vec!["settings.rs".into(), "render.rs".into()],
+                pr_info: Some((42, "Arregla login".into(), true)),
+            }),
+            sibling_sessions: Vec::new(),
+            base_branch: "main".into(),
+            cross_session_conflicts: Vec::new(),
         }
     }
 
@@ -297,5 +368,37 @@ mod tests {
         assert_eq!(snapshot.scroll_offset, 0);
         snapshot.scroll_up();
         assert_eq!(snapshot.scroll_offset, 0);
+    }
+
+    #[test]
+    fn test_conflict_radar_detects_overlapping_working_files() {
+        let s1 = WorktreeSessionFlow {
+            workspace_id: "ws-1".into(),
+            workspace_name: "telar-dev-1".into(),
+            branch: "feature/a".into(),
+            working_files: vec!["dock.rs".into(), "telemetry.rs".into()],
+            ..Default::default()
+        };
+        let s2 = WorktreeSessionFlow {
+            workspace_id: "ws-2".into(),
+            workspace_name: "telar-dev-2".into(),
+            branch: "feature/b".into(),
+            working_files: vec!["dock.rs".into(), "settings.rs".into()],
+            ..Default::default()
+        };
+
+        let conflicts = detect_cross_session_conflicts(&[s1.clone(), s2]);
+        assert_eq!(conflicts, vec!["dock.rs".to_string()]);
+
+        // Si no hay archivos solapados, el radar no reporta conflictos
+        let s3 = WorktreeSessionFlow {
+            workspace_id: "ws-3".into(),
+            workspace_name: "telar-dev-3".into(),
+            branch: "feature/c".into(),
+            working_files: vec!["main.rs".into()],
+            ..Default::default()
+        };
+        let clean = detect_cross_session_conflicts(&[s1, s3]);
+        assert!(clean.is_empty());
     }
 }
