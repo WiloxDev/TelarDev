@@ -1136,6 +1136,21 @@ impl ClientShellState {
         }
     }
 
+    pub(super) fn select_dock_tab_mouse(
+        &mut self,
+        tab: super::dock::DockTabId,
+        outcome: &mut ClientShellInput,
+    ) {
+        if self.right_dock_collapsed {
+            self.right_dock_collapsed = false;
+            self.right_dock_collapsed_manual = true;
+            self.invalidate_pane_surface();
+            outcome.resize = true;
+        }
+        self.right_dock_state.select_tab(tab);
+        outcome.repaint = true;
+    }
+
     pub(super) fn jump_to_dock_tab(
         &mut self,
         tab: super::dock::DockTabId,

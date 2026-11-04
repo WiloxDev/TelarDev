@@ -1962,12 +1962,11 @@ impl ClientShellState {
                 if let Some(tab_id) = self.hits.right_dock_tabs.iter().find_map(|(rect, id)| {
                     super::contains(*rect, point).then_some(*id)
                 }) {
-                    self.jump_to_dock_tab(tab_id, outcome);
+                    self.select_dock_tab_mouse(tab_id, outcome);
                     return;
                 }
                 if super::contains(self.hits.right_dock_split_toggle, point) {
                     self.right_dock_state.layout_mode = self.right_dock_state.layout_mode.toggle();
-                    self.mode = ClientShellMode::RightDock;
                     outcome.repaint = true;
                     return;
                 }
@@ -1975,7 +1974,6 @@ impl ClientShellState {
                     super::contains(*rect, point).then_some(*id)
                 }) {
                     self.right_dock_state.status_tab.toggle_section(sec_id);
-                    self.mode = ClientShellMode::RightDock;
                     outcome.repaint = true;
                     return;
                 }
@@ -1987,7 +1985,6 @@ impl ClientShellState {
                 if let Some(entry_index) = self.hits.right_dock_file_rows.iter().find_map(|(rect, idx)| {
                     super::contains(*rect, point).then_some(*idx)
                 }) {
-                    self.mode = ClientShellMode::RightDock;
                     let now = std::time::Instant::now();
                     let is_double_click = self.last_dock_file_click.as_ref().is_some_and(|(last_idx, last_time)| {
                         *last_idx == entry_index && now.duration_since(*last_time) <= std::time::Duration::from_millis(350)
@@ -2006,7 +2003,6 @@ impl ClientShellState {
                     return;
                 }
                 if super::contains(self.hits.right_dock_area, point) {
-                    self.mode = ClientShellMode::RightDock;
                     outcome.repaint = true;
                     return;
                 }
@@ -2301,6 +2297,7 @@ impl ClientShellState {
                     .find(|hit| super::contains(hit.rect, point))
                     .cloned();
                 if let Some(hit) = pane_hit {
+                    self.mode = ClientShellMode::Terminal;
                     if hit.mouse_reporting && super::contains(hit.inner_rect, point) {
                         self.push_pane_mouse_event(&hit, mouse, mouse.modifiers, outcome);
                         self.pane_mouse_gesture = Some(ClientPaneMouseGesture {

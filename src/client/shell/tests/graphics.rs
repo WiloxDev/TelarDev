@@ -149,6 +149,7 @@ fn notifications_and_clipboard_feedback_only_cover_their_drawn_corners() {
             let mut state =
                 ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
             state.sidebar_collapsed = true;
+            state.right_dock_collapsed = true;
             state.set_snapshot(Box::new(snapshot()));
             state.set_pane_surface(surface());
             state.visible_notification = Some(ClientVisibleNotification {
@@ -181,6 +182,7 @@ fn notifications_and_clipboard_feedback_only_cover_their_drawn_corners() {
             let mut state =
                 ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
             state.sidebar_collapsed = true;
+            state.right_dock_collapsed = true;
             state.config.clipboard_toast_position = position;
             state.set_snapshot(Box::new(snapshot()));
             state.set_pane_surface(surface());
@@ -209,7 +211,9 @@ fn notifications_and_clipboard_feedback_only_cover_their_drawn_corners() {
 
 #[test]
 fn endpoint_notice_and_multiline_diagnostic_cover_the_actual_rows() {
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut config = Config::default();
+    config.ui.right_dock_enabled = false;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     state.set_snapshot(Box::new(snapshot()));
     state.set_pane_surface(surface());
     state.visible_endpoint_notice = Some(ClientVisibleEndpointNotice {

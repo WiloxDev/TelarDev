@@ -2803,7 +2803,7 @@ mod tests {
             &mut outcome,
         );
         assert_eq!(state.right_dock_state.active_tab, DockTabId::Files);
-        assert_eq!(state.mode, ClientShellMode::RightDock);
+        assert_eq!(state.mode, ClientShellMode::Terminal);
 
         // 2. Click on Split toggle
         state.handle_mouse(
@@ -2819,6 +2819,7 @@ mod tests {
             state.right_dock_state.layout_mode,
             DockLayoutMode::SplitVertical
         );
+        assert_eq!(state.mode, ClientShellMode::Terminal);
 
         // 3. Scroll Down
         state.right_dock_state.files_tab.entries = vec![
@@ -2896,5 +2897,92 @@ mod tests {
             full_text.contains("TS"),
             "Debe contener el icono TS para tsconfig.json"
         );
+    }
+
+    #[test]
+    fn test_dock_mouse_interactions_preserve_terminal_mode_and_no_footer() {
+        use crate::client::shell::render;
+        use crate::client::shell::state::{ClientShellInput, ClientShellMode, ClientShellState};
+        use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+        assert_eq!(state.mode, ClientShellMode::Terminal);
+
+        let area = Rect::new(60, 0, 40, 30);
+        state.hits.right_dock_area = area;
+        state.hits.right_dock_tabs = vec![
+            (Rect::new(61, 0, 10, 1), DockTabId::Status),
+            (Rect::new(72, 0, 10, 1), DockTabId::Files),
+        ];
+        state.hits.right_dock_split_toggle = Rect::new(90, 0, 10, 1);
+        state.hits.right_dock_section_toggles = vec![(Rect::new(95, 2, 3, 1), 1)];
+
+        let mut outcome = ClientShellInput::default();
+
+        // Click on Tab
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 73,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.right_dock_state.active_tab, DockTabId::Files);
+        assert_eq!(state.mode, ClientShellMode::Terminal, "Mouse tab click must preserve Terminal mode");
+
+        // Click on Section Toggle
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 96,
+                row: 2,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.mode, ClientShellMode::Terminal, "Section accordion toggle must preserve Terminal mode");
+
+        // Click on Background
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: 70,
+                row: 15,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+        assert_eq!(state.mode, ClientShellMode::Terminal, "Dock background click must preserve Terminal mode");
+
+        // Verify mode bar returns None for Terminal and RightDock modes
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 100, 30));
+        let palette = crate::app::state::Palette::catppuccin();
+
+        let terminal_footer = render::render_mode_bar(
+            &mut buffer,
+            Rect::new(0, 0, 60, 30),
+            ClientShellMode::Terminal,
+            None,
+            None,
+            false,
+            &state.config.keybinds,
+            &palette,
+        );
+        assert_eq!(terminal_footer, None, "Terminal mode must have no footer bar");
+
+        let dock_footer = render::render_mode_bar(
+            &mut buffer,
+            Rect::new(0, 0, 60, 30),
+            ClientShellMode::RightDock,
+            None,
+            None,
+            false,
+            &state.config.keybinds,
+            &palette,
+        );
+        assert_eq!(dock_footer, None, "RightDock mode must never render intrusive footer bar across terminal");
     }
 }

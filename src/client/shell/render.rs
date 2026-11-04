@@ -38,7 +38,10 @@ pub(super) fn render_mode_bar(
     keybinds: &LiveKeybindConfig,
     palette: &Palette,
 ) -> Option<Rect> {
-    if (mode == ClientShellMode::Terminal && endpoint_error.is_none()) || pane_area.is_empty() {
+    if ((mode == ClientShellMode::Terminal || mode == ClientShellMode::RightDock)
+        && endpoint_error.is_none())
+        || pane_area.is_empty()
+    {
         return None;
     }
 
@@ -122,11 +125,7 @@ pub(super) fn render_mode_bar(
                 ]);
             }
             ClientShellMode::RightDock => {
-                segments.extend([
-                    (" DOCK ".to_owned(), mode_style),
-                    ("  esc".to_owned(), key),
-                    (" terminal".to_owned(), base),
-                ]);
+                return None;
             }
             ClientShellMode::Copy => {
                 let copy_mode = copy_mode?;

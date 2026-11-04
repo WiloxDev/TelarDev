@@ -727,6 +727,7 @@ impl ClientShellState {
                     match key.code {
                         KeyCode::Esc | KeyCode::Char('q') => {
                             self.right_dock_state.quick_peek = None;
+                            self.mode = ClientShellMode::Terminal;
                             outcome.repaint = true;
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
@@ -770,6 +771,7 @@ impl ClientShellState {
                         }
                         KeyCode::Enter => {
                             self.right_dock_state.files_tab.finish_search();
+                            self.mode = ClientShellMode::Terminal;
                             outcome.repaint = true;
                         }
                         KeyCode::Backspace => {
