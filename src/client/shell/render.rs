@@ -23,7 +23,7 @@ pub(in crate::client::shell) fn render_sidebar_background(
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
-            cell.set_style(Style::default().fg(palette.surface_dim));
+            cell.set_style(Style::default().fg(palette.overlay0));
         }
     }
 }

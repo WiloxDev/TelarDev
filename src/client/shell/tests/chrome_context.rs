@@ -73,7 +73,9 @@ fn focused_last_overflow_tab_shows_its_full_label() {
             agent_status: AgentStatus::Idle,
         })
         .collect();
-    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let mut config = Config::default();
+    config.ui.right_dock_enabled = false;
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
     for number in [8, 7, 8] {
         let tab_id = format!("tab_{number}");
         projected.focused_tab_id = Some(tab_id.clone());

@@ -159,7 +159,7 @@ impl Palette {
             selection_bg: Color::Rgb(45, 54, 80),
             surface0: Color::Rgb(36, 40, 59),
             surface1: Color::Rgb(65, 72, 104),
-            surface_dim: Color::Rgb(26, 27, 38),
+            surface_dim: Color::Rgb(41, 46, 66),
             overlay0: Color::Rgb(86, 95, 137),
             overlay1: Color::Rgb(105, 113, 150),
             text: Color::Rgb(192, 202, 245),
@@ -209,7 +209,7 @@ impl Palette {
             selection_bg: Color::Rgb(70, 63, 93),
             surface0: Color::Rgb(68, 71, 90),
             surface1: Color::Rgb(98, 114, 164),
-            surface_dim: Color::Rgb(40, 42, 54),
+            surface_dim: Color::Rgb(58, 62, 80),
             overlay0: Color::Rgb(98, 114, 164),
             overlay1: Color::Rgb(130, 140, 180),
             text: Color::Rgb(248, 248, 242),
@@ -234,7 +234,7 @@ impl Palette {
             selection_bg: Color::Rgb(64, 80, 93),
             surface0: Color::Rgb(59, 66, 82),
             surface1: Color::Rgb(67, 76, 94),
-            surface_dim: Color::Rgb(46, 52, 64),
+            surface_dim: Color::Rgb(59, 66, 82),
             overlay0: Color::Rgb(76, 86, 106),
             overlay1: Color::Rgb(100, 110, 130),
             text: Color::Rgb(236, 239, 244),
@@ -259,7 +259,7 @@ impl Palette {
             selection_bg: Color::Rgb(75, 63, 39),
             surface0: Color::Rgb(60, 56, 54),
             surface1: Color::Rgb(80, 73, 69),
-            surface_dim: Color::Rgb(40, 40, 40),
+            surface_dim: Color::Rgb(60, 56, 54),
             overlay0: Color::Rgb(146, 131, 116),
             overlay1: Color::Rgb(168, 153, 132),
             text: Color::Rgb(235, 219, 178),
@@ -309,7 +309,7 @@ impl Palette {
             selection_bg: Color::Rgb(51, 70, 89),
             surface0: Color::Rgb(44, 49, 58),
             surface1: Color::Rgb(62, 68, 81),
-            surface_dim: Color::Rgb(40, 44, 52),
+            surface_dim: Color::Rgb(53, 59, 69),
             overlay0: Color::Rgb(92, 99, 112),
             overlay1: Color::Rgb(115, 122, 135),
             text: Color::Rgb(171, 178, 191),
@@ -334,7 +334,7 @@ impl Palette {
             selection_bg: Color::Rgb(205, 219, 248),
             surface0: Color::Rgb(240, 240, 241),
             surface1: Color::Rgb(229, 229, 230),
-            surface_dim: Color::Rgb(245, 245, 246),
+            surface_dim: Color::Rgb(229, 229, 230),
             overlay0: Color::Rgb(160, 161, 167),
             overlay1: Color::Rgb(104, 107, 119),
             text: Color::Rgb(56, 58, 66),
@@ -359,7 +359,7 @@ impl Palette {
             selection_bg: Color::Rgb(8, 62, 85),
             surface0: Color::Rgb(7, 54, 66),
             surface1: Color::Rgb(88, 110, 117),
-            surface_dim: Color::Rgb(0, 43, 54),
+            surface_dim: Color::Rgb(7, 54, 66),
             overlay0: Color::Rgb(88, 110, 117),
             overlay1: Color::Rgb(101, 123, 131),
             text: Color::Rgb(147, 161, 161),
@@ -409,7 +409,7 @@ impl Palette {
             selection_bg: Color::Rgb(50, 56, 75),
             surface0: Color::Rgb(42, 42, 55),
             surface1: Color::Rgb(54, 54, 70),
-            surface_dim: Color::Rgb(31, 31, 40),
+            surface_dim: Color::Rgb(42, 42, 55),
             overlay0: Color::Rgb(114, 113, 105),
             overlay1: Color::Rgb(135, 134, 125),
             text: Color::Rgb(220, 215, 186),
@@ -684,7 +684,7 @@ impl Palette {
             selection_bg: Color::Rgb(29, 59, 83),
             surface0: Color::Rgb(11, 41, 66),
             surface1: Color::Rgb(29, 59, 83),
-            surface_dim: Color::Rgb(1, 14, 26),
+            surface_dim: Color::Rgb(11, 41, 66),
             overlay0: Color::Rgb(124, 143, 143),
             overlay1: Color::Rgb(156, 170, 182),
             text: Color::Rgb(195, 204, 220),
@@ -709,7 +709,7 @@ impl Palette {
             selection_bg: Color::Rgb(57, 57, 57),
             surface0: Color::Rgb(38, 38, 38),
             surface1: Color::Rgb(57, 57, 57),
-            surface_dim: Color::Rgb(18, 18, 18),
+            surface_dim: Color::Rgb(38, 38, 38),
             overlay0: Color::Rgb(82, 82, 82),
             overlay1: Color::Rgb(221, 225, 230),
             text: Color::Rgb(255, 255, 255),
@@ -832,10 +832,10 @@ impl Palette {
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(40, 18, 30), // #28121e - subtle plum active row
             selection_bg: Color::Rgb(65, 30, 48),  // #411e30 - navigate selection
-            surface0: Color::Rgb(35, 18, 28),      // #23121c - inactive tabs/cards
-            surface1: Color::Rgb(55, 28, 44),      // #371c2c - hover/borders
-            surface_dim: Color::Rgb(42, 23, 32),   // #2a1720 - separators
-            overlay0: Color::Rgb(140, 115, 128),   // #8c7380 - muted text
+            surface0: Color::Rgb(45, 24, 36),      // #2d1824 - inactive tabs/cards
+            surface1: Color::Rgb(98, 56, 78),      // #62384e - hover/borders
+            surface_dim: Color::Rgb(85, 48, 68),   // #553044 - separators
+            overlay0: Color::Rgb(140, 115, 128),   // #8c7380 - muted text / structural borders
             overlay1: Color::Rgb(190, 160, 175),   // #bea0af - bright muted
             text: Color::Rgb(246, 239, 243),       // #f6eff3 - pearl soft white
             subtext0: Color::Rgb(215, 160, 184),   // #d7a0b8 - soft rose labels
@@ -1813,6 +1813,49 @@ mod tests {
                 Color::Reset,
                 "built-in theme changed the sidebar background: {name}"
             );
+        }
+    }
+
+    #[test]
+    fn built_in_surface_dim_separators_stay_distinct_from_panel_background() {
+        for name in crate::config::THEME_NAMES
+            .iter()
+            .copied()
+            .filter(|name| *name != "terminal")
+        {
+            let palette = Palette::from_name(name).unwrap();
+            assert_ne!(
+                palette.surface_dim, palette.panel_bg,
+                "separator color (surface_dim) matches panel_bg for {name}"
+            );
+            let contrast = contrast_ratio(palette.panel_bg, palette.surface_dim);
+            assert!(
+                contrast >= 1.05,
+                "surface_dim loses contrast against panel_bg for {name}: {contrast:.2}:1"
+            );
+        }
+    }
+
+    #[test]
+    fn built_in_overlay0_structural_contrast_against_panel_and_terminal() {
+        for name in crate::config::THEME_NAMES
+            .iter()
+            .copied()
+            .filter(|name| *name != "terminal")
+        {
+            let palette = Palette::from_name(name).unwrap();
+            let contrast_panel = contrast_ratio(palette.panel_bg, palette.overlay0);
+            assert!(
+                contrast_panel >= 1.6,
+                "overlay0 structural contrast too low against panel_bg for {name}: {contrast_panel:.2}:1"
+            );
+            if !palette.is_light() {
+                let contrast_black = contrast_ratio(Color::Rgb(0, 0, 0), palette.overlay0);
+                assert!(
+                    contrast_black >= 2.5,
+                    "overlay0 structural contrast too low against black for {name}: {contrast_black:.2}:1"
+                );
+            }
         }
     }
 

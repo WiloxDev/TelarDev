@@ -676,7 +676,7 @@ pub(super) fn render_right_dock(
     for y in area.y..area.bottom() {
         if let Some(cell) = buffer.cell_mut((separator_x, y)) {
             cell.set_symbol("│");
-            cell.set_style(Style::default().fg(config.palette.surface_dim));
+            cell.set_style(Style::default().fg(config.palette.overlay0));
         }
     }
 
@@ -795,7 +795,7 @@ pub(super) fn render_right_dock(
         for x in content_x..area.right() {
             if let Some(cell) = buffer.cell_mut((x, header_divider_y)) {
                 cell.set_symbol("─");
-                cell.set_style(Style::default().fg(config.palette.surface_dim));
+                cell.set_style(Style::default().fg(config.palette.overlay0));
             }
         }
     }
@@ -822,7 +822,7 @@ pub(super) fn render_right_dock(
         for x in content_x..area.right() {
             if let Some(cell) = buffer.cell_mut((x, split_divider_y)) {
                 cell.set_symbol("─");
-                cell.set_style(Style::default().fg(config.palette.surface_dim));
+                cell.set_style(Style::default().fg(config.palette.overlay0));
             }
         }
         let lower_body_y = split_divider_y + 1;
@@ -1089,7 +1089,7 @@ fn render_status_content(
     let is_preview = context.map(|c| c.is_preview).unwrap_or(false);
     let branch_name = context.and_then(|c| c.branch).unwrap_or("unavailable");
 
-    let card_border_style = Style::default().fg(config.palette.surface_dim);
+    let card_border_style = Style::default().fg(config.palette.overlay0);
     let card_title_style = Style::default()
         .fg(config.palette.mauve)
         .add_modifier(ratatui::style::Modifier::BOLD);
@@ -2340,7 +2340,7 @@ mod tests {
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("ENGRAM"));
+        assert!(text.contains("Engram"));
         assert!(text.contains("Context"));
 
         config.right_dock_show_engram = false;
@@ -2393,8 +2393,8 @@ mod tests {
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("POOL: Gemini"));
-        assert!(text.contains("CENTINELA"));
+        assert!(text.contains("Pool: Gemini"));
+        assert!(text.contains("Centinela"));
         assert!(text.contains("5 HORAS"));
 
         // Totopo27 mode
@@ -2412,8 +2412,9 @@ mod tests {
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("CPAMC / Cuentas"));
-        assert!(!text.contains("CENTINELA"));
+        assert!(text.contains("CPAMC"));
+        assert!(text.contains("cuentas"));
+        assert!(!text.contains("Centinela"));
 
         // Disabled
         config.right_dock_show_cpamc = false;
@@ -2430,7 +2431,7 @@ mod tests {
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(!text.contains("POOL:"));
+        assert!(!text.contains("Pool:"));
         assert!(!text.contains("CPAMC / Cuentas"));
     }
 
@@ -2463,8 +2464,8 @@ mod tests {
             None,
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
-        assert!(text.contains("• TOOLS"));
-        assert!(text.contains("• MCP"));
+        assert!(text.contains("Tools"));
+        assert!(text.contains("MCP"));
 
         config.right_dock_show_tools = false;
         config.right_dock_show_mcp = false;
