@@ -1117,7 +1117,7 @@ fn render_status_content(
         .fg(config.palette.mauve)
         .add_modifier(ratatui::style::Modifier::BOLD);
     let card_badge_style = Style::default()
-        .fg(config.palette.accent)
+        .fg(config.palette.subtext0)
         .add_modifier(ratatui::style::Modifier::BOLD);
     let key_style = Style::default().fg(config.palette.overlay0);
     let val_accent = Style::default().fg(config.palette.accent);
