@@ -59,7 +59,8 @@ use super::{
     MASTRACODE_HOOK_INSTALL_NAME, MASTRACODE_HOOK_TIMEOUT_MS, MASTRACODE_REMOVED_HOOK_EVENTS,
     OMP_EXTENSION_ASSET, OMP_EXTENSION_INSTALL_NAME, OPENCODE_PLUGIN_ASSET,
     OPENCODE_PLUGIN_INSTALL_NAME, OPENCODE_TUI_PLUGIN_ASSET, OPENCODE_TUI_PLUGIN_INSTALL_NAME,
-    OPENCODE_TUI_PLUGIN_SPEC, PI_EXTENSION_ASSET, PI_EXTENSION_INSTALL_NAME, QODERCLI_HOOK_ASSET,
+    OPENCODE_TUI_PLUGIN_SPEC, PI_EXTENSION_ASSET, PI_EXTENSION_INSTALL_NAME,
+    PI_EXTENSION_LEGACY_INSTALL_NAME, QODERCLI_HOOK_ASSET,
     QODERCLI_HOOK_EVENTS, QODERCLI_HOOK_INSTALL_NAME, QODERCLI_REMOVED_LIFECYCLE_HOOK_EVENTS,
     QWEN_HOOK_ASSET, QWEN_HOOK_EVENTS, QWEN_HOOK_INSTALL_NAME,
 };
@@ -80,6 +81,12 @@ fn ensure_extension_dir(dir: &Path, agent: &str) -> io::Result<()> {
 pub(crate) fn install_pi() -> io::Result<PathBuf> {
     let dir = pi_extension_dir()?;
     ensure_extension_dir(&dir, "pi")?;
+
+    // Limpieza de extensión de nombre legado para evitar colisiones
+    let legacy_path = dir.join(PI_EXTENSION_LEGACY_INSTALL_NAME);
+    if legacy_path.is_file() {
+        let _ = fs::remove_file(legacy_path);
+    }
 
     let path = dir.join(PI_EXTENSION_INSTALL_NAME);
     fs::write(&path, PI_EXTENSION_ASSET)?;
@@ -554,7 +561,14 @@ pub(crate) fn install_hermes() -> io::Result<HermesInstallPaths> {
 
 pub(crate) fn uninstall_pi() -> io::Result<PiUninstallResult> {
     let extension_path = pi_extension_dir()?.join(PI_EXTENSION_INSTALL_NAME);
-    let removed_extension = remove_file_if_exists(&extension_path)?;
+    let mut removed_extension = remove_file_if_exists(&extension_path)?;
+
+    if let Ok(dir) = pi_extension_dir() {
+        let legacy_path = dir.join(PI_EXTENSION_LEGACY_INSTALL_NAME);
+        if remove_file_if_exists(&legacy_path)? {
+            removed_extension = true;
+        }
+    }
 
     Ok(PiUninstallResult {
         extension_path,

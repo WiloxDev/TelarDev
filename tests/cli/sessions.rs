@@ -259,7 +259,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
     register_runtime_dir(&runtime_dir);
     let missing_socket = runtime_dir.join("missing.sock");
 
-    let expected_extension = extensions_dir.join("herdr-agent-state.ts");
+    let expected_extension = extensions_dir.join("telar-agent-state.ts");
     assert!(
         !expected_extension.exists(),
         "test setup should start without extension file"
@@ -295,7 +295,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
         .unwrap();
     assert_eq!(integration_status.status.code(), Some(0));
     let status_stdout = String::from_utf8_lossy(&integration_status.stdout);
-    assert!(status_stdout.contains("pi: current (v9)"));
+    assert!(status_stdout.contains("pi: current (v10)"));
     assert!(status_stdout.contains("claude: not installed"));
 
     let integration_uninstall = Command::new(env!("CARGO_BIN_EXE_herdr"))
@@ -321,7 +321,7 @@ fn integration_status_outdated_only_prints_action_for_legacy_install() {
     let extensions_dir = home_dir.join(".pi/agent/extensions");
     fs::create_dir_all(&extensions_dir).unwrap();
     fs::write(
-        extensions_dir.join("herdr-agent-state.ts"),
+        extensions_dir.join("telar-agent-state.ts"),
         "// legacy herdr integration\n",
     )
     .unwrap();

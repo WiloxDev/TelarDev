@@ -47,7 +47,7 @@ afterEach(async () => {
 });
 
 const integrations = [
-  { name: "Pi", modulePath: "./pi/herdr-agent-state.ts" },
+  { name: "Pi", modulePath: "./pi/telar-agent-state.ts" },
   { name: "Oh My Pi", modulePath: "./omp/herdr-agent-state.ts" },
 ] as const;
 
@@ -276,7 +276,7 @@ test("OMP accepts POSIX and Windows session paths", async () => {
 test("Pi reports a Windows session path", async () => {
   const requests = await startRecordingServer("pi-windows-session-path");
   const { handlers, pi } = createExtensionHarness();
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   const sessionPath = "C:\\Users\\User\\.pi\\agent\\sessions\\pi-session.jsonl";
@@ -298,7 +298,7 @@ test("Pi reports a Windows session path", async () => {
 test("Pi reports idle only after the agent settles", async () => {
   const requests = await startRecordingServer("pi-settled");
   const { handlers, pi } = createExtensionHarness();
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   expect(completionHandlers(handlers)).toEqual(["agent_settled"]);
@@ -328,7 +328,7 @@ test("Pi reports idle only after the agent settles", async () => {
 test("Pi ignores RPC sessions even when UI APIs are available", async () => {
   const requests = await startRecordingServer("pi-rpc");
   const { handlers, pi } = createExtensionHarness();
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   const context = {
@@ -347,7 +347,7 @@ test("Pi ignores RPC sessions even when UI APIs are available", async () => {
 test("Pi settlement preserves explicit blocked-state precedence", async () => {
   const requests = await startRecordingServer("pi-settled-blocked");
   const { eventHandlers, handlers, pi } = createExtensionHarness();
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   let idle = true;
@@ -374,7 +374,7 @@ test("Pi reports the session replacement source", async () => {
   const requests = await startRecordingServer("pi-session-source");
   const { handlers, pi } = createExtensionHarness();
 
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   const sessionStart = handlers.get("session_start");
@@ -438,7 +438,7 @@ test("Pi waits for a replacement session report before publishing state", async 
 
   configureIntegrationEnvironment(recordingSocketPath);
   const { handlers, pi } = createExtensionHarness();
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   const sessionStart = handlers.get("session_start");
@@ -597,7 +597,7 @@ test("Pi retries working state after an unanswered socket attempt", async () => 
     await startDroppedFirstResponseServer("pi-retry");
   const { handlers, pi } = createExtensionHarness();
 
-  const { default: install } = await importFresh("./pi/herdr-agent-state.ts");
+  const { default: install } = await importFresh("./pi/telar-agent-state.ts");
   install(pi);
 
   const sessionStart = handlers.get("session_start");
