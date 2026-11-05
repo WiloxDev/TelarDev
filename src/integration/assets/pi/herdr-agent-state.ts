@@ -146,6 +146,84 @@ function sendState(state: AgentState, message?: string, seq = nextReportSeq()): 
   });
 }
 
+function sendMetadata(tokens: Record<string, string | null>): Promise<void> {
+  return sendRequest({
+    id: `${source}:meta:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+    method: "pane.report_metadata",
+    params: {
+      pane_id: paneId,
+      source,
+      agent: "pi",
+      tokens,
+    },
+  });
+}
+
+function collectAndReportTelemetry(ctx: any): void {
+  try {
+    const tokens: Record<string, string> = {};
+
+    // 1. Model / profile
+    const model = ctx?.model?.id || ctx?.model?.name;
+    if (typeof model === "string" && model.length > 0) {
+      tokens.profile = model;
+    }
+
+    // 2. Context Usage (API oficial y nativa de Pi)
+    if (typeof ctx?.getContextUsage === "function") {
+      const usage = ctx.getContextUsage();
+      if (usage) {
+        if (typeof usage.percent === "number") {
+          tokens.ctx_pct = String(Math.round(usage.percent));
+        }
+        if (typeof usage.tokens === "number") {
+          tokens.ctx_tok = String(usage.tokens);
+        }
+        if (typeof usage.contextWindow === "number") {
+          tokens.ctx_win = String(usage.contextWindow);
+        }
+      }
+    }
+
+    // 3. Stats desde entries o stats directos
+    const stats = ctx?.stats;
+    if (stats) {
+      if (typeof stats.cost === "number") {
+        tokens.cost = stats.cost.toFixed(3);
+      }
+      if (typeof stats.turns === "number") {
+        tokens.turns = String(stats.turns);
+      }
+      if (typeof stats.inputTokens === "number") {
+        tokens.tok_in = String(stats.inputTokens);
+      }
+      if (typeof stats.outputTokens === "number") {
+        tokens.tok_out = String(stats.outputTokens);
+      }
+    }
+
+    // 4. TODOs activos de la sesión (máximo 5 para respetar límites de metadatos de Telar)
+    const taskStore = ctx?.taskStore || (globalThis as any)?.__gentle_tasks;
+    const taskList = Array.isArray(taskStore?.tasks) ? taskStore.tasks : Array.isArray(ctx?.todos) ? ctx.todos : null;
+    if (taskList && taskList.length > 0) {
+      const boundedTasks = taskList.slice(0, 5);
+      boundedTasks.forEach((t: any, idx: number) => {
+        if (!t?.title) return;
+        const prefix = t.status === "done" ? "done" : t.status === "in_progress" ? "prog" : "open";
+        // Limitar título a 60 caracteres para cumplir con MAX_METADATA_TOKEN_VALUE_LEN = 80
+        const cleanTitle = String(t.title).slice(0, 60).replace(/[:\n\r]/g, " ");
+        tokens[`todo_${idx + 1}`] = `${prefix}:${cleanTitle}`;
+      });
+    }
+
+    if (Object.keys(tokens).length > 0) {
+      void sendMetadata(tokens);
+    }
+  } catch {
+    // Telemetría no intrusiva: fallar en silencio sin alterar ejecución
+  }
+}
+
 let sendInFlight = false;
 let queuedState: QueuedState | undefined;
 
@@ -235,6 +313,7 @@ export default function (pi) {
     rootSession = true;
     updateSessionRef(ctx);
     await reportSession(event?.reason);
+    collectAndReportTelemetry(ctx);
     // A reload can replace this extension mid-run without emitting another agent_start.
     agentActive = ctx?.isIdle?.() === false;
     publishState(true);
@@ -246,8 +325,24 @@ export default function (pi) {
     }
     updateSessionRef(ctx);
     void reportSession();
+    collectAndReportTelemetry(ctx);
     agentActive = true;
     publishState();
+  });
+
+  // Suscripción a eventos durante el turno para cadencia reactiva en vivo (sin esperar a agent_settled)
+  pi.on("tool_execution_end", (_event, ctx) => {
+    if (!rootSession) {
+      return;
+    }
+    collectAndReportTelemetry(ctx);
+  });
+
+  pi.on("turn_end", (_event, ctx) => {
+    if (!rootSession) {
+      return;
+    }
+    collectAndReportTelemetry(ctx);
   });
 
   pi.on("agent_settled", (_event, ctx) => {
@@ -255,6 +350,7 @@ export default function (pi) {
       return;
     }
 
+    collectAndReportTelemetry(ctx);
     agentActive = false;
     publishState();
   });

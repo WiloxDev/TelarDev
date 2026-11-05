@@ -226,6 +226,21 @@ pub(crate) fn render_sidebar(
             .add_modifier(Modifier::BOLD),
     );
 
+    let net_icon = &config.network_icon;
+    let net_icon_width = display_width(net_icon);
+    let net_btn_x = workspace_area.right().saturating_sub(net_icon_width + 1);
+    if net_btn_x > workspace_area.x + 8 {
+        put_text(
+            buffer,
+            net_btn_x,
+            workspace_area.y,
+            net_icon_width,
+            net_icon,
+            Style::default().fg(palette.accent),
+        );
+        hits.network_projects_button = Rect::new(net_btn_x, workspace_area.y, net_icon_width, 1);
+    }
+
     let entries = workspace_entries(snapshot, state.collapsed_groups);
     let body = Rect::new(
         workspace_area.x,
@@ -938,5 +953,110 @@ mod tests {
             Some(&config),
         );
         assert_eq!(custom_label, "🌐 remote-projects");
+    }
+
+    #[test]
+    fn test_network_projects_button_click_opens_picker_overlay() {
+        use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+        state.set_snapshot(Box::new(crate::client::shell::tests::snapshot()));
+        state.compose(106, 25).expect("composed frame");
+
+        assert!(
+            !state.hits.network_projects_button.is_empty(),
+            "network_projects_button hit area must be rendered"
+        );
+
+        let btn = state.hits.network_projects_button;
+        let mut outcome = ClientShellInput::default();
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: btn.x,
+                row: btn.y,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+
+        assert!(
+            matches!(
+                state.overlay,
+                Some(ClientShellOverlay::NetworkProjectPicker(_))
+            ),
+            "clicking network icon must open NetworkProjectPicker"
+        );
+    }
+
+    #[test]
+    fn test_network_project_picker_keyboard_navigation_and_enter() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+        state.set_snapshot(Box::new(crate::client::shell::tests::snapshot()));
+
+        let temp_dir = std::env::temp_dir().join(format!("herdr-test-net-{}", std::process::id()));
+        std::fs::create_dir_all(temp_dir.join("sub-alpha")).unwrap();
+        std::fs::create_dir_all(temp_dir.join("sub-beta")).unwrap();
+
+        state.overlay = Some(ClientShellOverlay::NetworkProjectPicker(
+            ClientNetworkProjectPickerOverlay {
+                _root_path: temp_dir.clone(),
+                root_display: temp_dir.to_string_lossy().to_string(),
+                entries: vec![
+                    ClientNetworkProjectEntry {
+                        name: "sub-alpha".into(),
+                        full_path: temp_dir.join("sub-alpha"),
+                    },
+                    ClientNetworkProjectEntry {
+                        name: "sub-beta".into(),
+                        full_path: temp_dir.join("sub-beta"),
+                    },
+                ],
+                selected: 0,
+                scroll_offset: 0,
+                query: text_editor::TextEditor::default(),
+                _search_focused: true,
+            },
+        ));
+
+        let mut outcome = ClientShellInput::default();
+
+        // 1. Navegar hacia abajo
+        state.handle_key(
+            KeyEvent::new(KeyCode::Down, KeyModifiers::NONE).into(),
+            &mut outcome,
+        );
+        let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = state.overlay.as_ref() else {
+            panic!("picker expected");
+        };
+        assert_eq!(picker.selected, 1);
+
+        // 2. Presionar Enter para crear workspace
+        state.handle_key(
+            KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE).into(),
+            &mut outcome,
+        );
+        assert!(state.overlay.is_none(), "Enter must close the overlay");
+
+        let created_action = outcome.actions.iter().any(|action| {
+            if let ClientShellAction::Endpoint { request, .. } = action {
+                if let crate::api::schema::Method::WorkspaceCreate(params) = &request.method {
+                    return params.label.as_deref() == Some("sub-beta")
+                        && params.cwd.as_deref()
+                            == Some(temp_dir.join("sub-beta").to_string_lossy().as_ref());
+                }
+            }
+            false
+        });
+        assert!(
+            created_action,
+            "Enter must dispatch WorkspaceCreate for selected network project"
+        );
+
+        let _ = std::fs::remove_dir_all(temp_dir);
     }
 }

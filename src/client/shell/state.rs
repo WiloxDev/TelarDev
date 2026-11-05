@@ -122,6 +122,7 @@ pub(super) struct ShellHitMap {
     pub(super) sidebar_divider: Rect,
     pub(super) sidebar_section_divider: Rect,
     pub(super) sidebar_toggle: Rect,
+    pub(super) network_projects_button: Rect,
     pub(super) new_workspace: Rect,
     pub(super) new_tab: Rect,
     pub(super) tab_scroll_left: Rect,
@@ -316,6 +317,7 @@ pub(super) enum ClientShellOverlayKind {
     ContextMenu,
     GlobalMenu,
     Settings,
+    NetworkProjectPicker,
 }
 
 #[derive(Debug)]
@@ -628,6 +630,7 @@ pub(super) enum ClientShellOverlay {
     ContextMenu(ClientContextMenuOverlay),
     GlobalMenu(ClientGlobalMenuOverlay),
     Settings(ClientSettingsOverlay),
+    NetworkProjectPicker(ClientNetworkProjectPickerOverlay),
 }
 
 impl ClientShellOverlay {
@@ -646,6 +649,7 @@ impl ClientShellOverlay {
             Self::ContextMenu(_) => ClientShellOverlayKind::ContextMenu,
             Self::GlobalMenu(_) => ClientShellOverlayKind::GlobalMenu,
             Self::Settings(_) => ClientShellOverlayKind::Settings,
+            Self::NetworkProjectPicker(_) => ClientShellOverlayKind::NetworkProjectPicker,
         }
     }
 }
@@ -888,6 +892,60 @@ pub(super) struct ClientCopyModeState {
     pub(super) search_current_global: Option<u64>,
     pub(super) search_generation: u64,
     pub(super) copy_after_search: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct ClientNetworkProjectEntry {
+    pub(super) name: String,
+    pub(super) full_path: std::path::PathBuf,
+}
+
+#[derive(Debug)]
+pub(super) struct ClientNetworkProjectPickerOverlay {
+    pub(super) _root_path: std::path::PathBuf,
+    pub(super) root_display: String,
+    pub(super) entries: Vec<ClientNetworkProjectEntry>,
+    pub(super) selected: usize,
+    pub(super) scroll_offset: usize,
+    pub(super) query: text_editor::TextEditor,
+    pub(super) _search_focused: bool,
+}
+
+impl ClientNetworkProjectPickerOverlay {
+    pub(super) fn filtered_indices(&self) -> Vec<usize> {
+        let q = self.query.to_string().to_lowercase();
+        if q.is_empty() {
+            return (0..self.entries.len()).collect();
+        }
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, entry)| {
+                if entry.name.to_lowercase().contains(&q) {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    pub(super) fn selected_entry(&self) -> Option<&ClientNetworkProjectEntry> {
+        let filtered = self.filtered_indices();
+        let &idx = filtered.get(self.selected)?;
+        self.entries.get(idx)
+    }
+
+    pub(super) fn ensure_selected_visible(&mut self, viewport_rows: usize) {
+        if viewport_rows == 0 {
+            return;
+        }
+        if self.selected < self.scroll_offset {
+            self.scroll_offset = self.selected;
+        } else if self.selected >= self.scroll_offset + viewport_rows {
+            self.scroll_offset = self.selected.saturating_sub(viewport_rows - 1);
+        }
+    }
 }
 
 pub(crate) struct ClientShellState {

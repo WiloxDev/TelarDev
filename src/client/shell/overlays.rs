@@ -79,6 +79,9 @@ pub(crate) fn render_client_overlay(
         ClientShellOverlay::WorktreeRemove(v) => {
             worktree_overlays::render_worktree_remove_overlay(b, v, p)
         }
+        ClientShellOverlay::NetworkProjectPicker(v) => {
+            render_network_project_picker_overlay(b, v, p)
+        }
         ClientShellOverlay::ContextMenu(_) | ClientShellOverlay::GlobalMenu(_) => None,
     }
 }
@@ -1312,6 +1315,155 @@ fn render_confirm_close_overlay(
         worktree_search: Rect::default(),
         worktree_rows: Vec::new(),
         cursor: None,
+        ..OverlayRender::default()
+    })
+}
+
+fn render_network_project_picker_overlay(
+    b: &mut Buffer,
+    picker: &ClientNetworkProjectPickerOverlay,
+    p: &Palette,
+) -> Option<OverlayRender> {
+    let filtered = picker.filtered_indices();
+    let max_available_h = b.area.height.saturating_sub(4);
+    let popup_height = (filtered.len().saturating_add(6) as u16).clamp(16, max_available_h.min(30));
+    let popup_width = (b.area.width.saturating_sub(8)).clamp(74, 96);
+    let popup = popup(b.area, popup_width, popup_height)?;
+    let inner = panel(b, popup, p.accent, p.panel_bg)?;
+
+    let title = format!(" 🖧  PROYECTOS EN RED ({})", picker.root_display);
+    put_text(
+        b,
+        inner.x,
+        inner.y,
+        inner.width,
+        &title,
+        Style::default()
+            .fg(p.accent)
+            .bg(p.panel_bg)
+            .add_modifier(Modifier::BOLD),
+    );
+
+    let search_rect = Rect::new(inner.x, inner.y + 1, inner.width, 1);
+    let q_str = picker.query.to_string();
+    let search_text = if q_str.is_empty() {
+        " 🔍  / filtrar proyectos...".to_string()
+    } else {
+        format!(" 🔍  / {q_str}")
+    };
+    put_text(
+        b,
+        search_rect.x,
+        search_rect.y,
+        search_rect.width,
+        &search_text,
+        Style::default().fg(p.text).bg(p.surface0),
+    );
+
+    let count_text = format!("{} proyectos ", filtered.len());
+    put_right_text(
+        b,
+        search_rect,
+        search_rect.y,
+        &count_text,
+        Style::default().fg(p.overlay0).bg(p.surface0),
+    );
+
+    let list_y = inner.y + 3;
+    let available_rows = inner.height.saturating_sub(4) as usize;
+    let max_scroll = filtered.len().saturating_sub(available_rows);
+    let scroll_offset = picker.scroll_offset.min(max_scroll);
+
+    if max_scroll > 0 {
+        let metrics = crate::pane::ScrollMetrics {
+            offset_from_bottom: max_scroll.saturating_sub(scroll_offset),
+            max_offset_from_bottom: max_scroll,
+            viewport_rows: available_rows,
+        };
+        let track = Rect::new(
+            inner.right().saturating_sub(1),
+            list_y,
+            1,
+            available_rows as u16,
+        );
+        crate::ui::render_scrollbar_buffer(b, metrics, track, p.surface0, p.accent, "█");
+    }
+
+    let row_content_width = if max_scroll > 0 {
+        inner.width.saturating_sub(2)
+    } else {
+        inner.width
+    };
+
+    if filtered.is_empty() {
+        let empty_msg = if picker.entries.is_empty() {
+            " (No se encontraron subcarpetas en la ruta o recurso inaccesible)"
+        } else {
+            " (Sin coincidencias con la búsqueda)"
+        };
+        put_text(
+            b,
+            inner.x + 1,
+            list_y,
+            row_content_width.saturating_sub(2),
+            empty_msg,
+            Style::default().fg(p.overlay0).bg(p.panel_bg),
+        );
+    } else {
+        for (pos, &real_idx) in filtered
+            .iter()
+            .skip(scroll_offset)
+            .take(available_rows)
+            .enumerate()
+        {
+            let entry = &picker.entries[real_idx];
+            let row_y = list_y + pos as u16;
+            let is_selected = (scroll_offset + pos) == picker.selected;
+
+            let row_rect = Rect::new(inner.x, row_y, row_content_width, 1);
+            if is_selected {
+                b.set_style(row_rect, Style::default().bg(p.surface0));
+            }
+
+            let bullet = if is_selected { " ▶ 📁 " } else { "   📁 " };
+            let bullet_style = if is_selected {
+                Style::default().fg(p.accent).bg(p.surface0)
+            } else {
+                Style::default().fg(p.text).bg(p.panel_bg)
+            };
+            put_text(b, inner.x, row_y, 6, bullet, bullet_style);
+
+            let text_style = if is_selected {
+                Style::default()
+                    .fg(p.text)
+                    .bg(p.surface0)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(p.text).bg(p.panel_bg)
+            };
+            put_text(
+                b,
+                inner.x + 6,
+                row_y,
+                row_content_width.saturating_sub(7),
+                &entry.name,
+                text_style,
+            );
+        }
+    }
+
+    let footer_y = inner.bottom().saturating_sub(1);
+    put_text(
+        b,
+        inner.x,
+        footer_y,
+        inner.width,
+        " [↑/↓: Mover · Enter: Integrar a Spaces · Esc: Cancelar]",
+        Style::default().fg(p.overlay0).bg(p.panel_bg),
+    );
+
+    Some(OverlayRender {
+        area: popup,
         ..OverlayRender::default()
     })
 }

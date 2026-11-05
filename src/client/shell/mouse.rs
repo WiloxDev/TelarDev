@@ -1913,6 +1913,22 @@ impl ClientShellState {
                     outcome.repaint = true;
                 }
             }
+            MouseEventKind::ScrollUp
+                if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) =>
+            {
+                if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                    picker.scroll_offset = picker.scroll_offset.saturating_sub(2);
+                    outcome.repaint = true;
+                }
+            }
+            MouseEventKind::ScrollDown
+                if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) =>
+            {
+                if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                    picker.scroll_offset = picker.scroll_offset.saturating_add(2);
+                    outcome.repaint = true;
+                }
+            }
             MouseEventKind::ScrollUp if super::contains(self.hits.workspace_body, point) => {
                 let next = self.workspace_scroll.saturating_sub(1);
                 if next != self.workspace_scroll {
@@ -2115,6 +2131,11 @@ impl ClientShellState {
                 }
                 if super::contains(self.hits.global_launcher, point) {
                     self.toggle_global_menu();
+                    outcome.repaint = true;
+                    return;
+                }
+                if super::contains(self.hits.network_projects_button, point) {
+                    self.open_network_project_picker();
                     outcome.repaint = true;
                     return;
                 }

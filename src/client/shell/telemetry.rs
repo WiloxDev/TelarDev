@@ -30,11 +30,11 @@ pub struct ContextUsage {
 impl Default for ContextUsage {
     fn default() -> Self {
         Self {
-            used_tokens: 179_200,
-            limit_tokens: 1_000_000,
-            percent: 17.9,
+            used_tokens: 0,
+            limit_tokens: 0,
+            percent: 0.0,
             cost: 0.0,
-            status_label: "Optimo 17.9%".to_string(),
+            status_label: String::new(),
         }
     }
 }
@@ -54,14 +54,14 @@ pub struct GitSummary {
 impl Default for GitSummary {
     fn default() -> Self {
         Self {
-            branch: "main".to_string(),
+            branch: String::new(),
             modified_count: 0,
-            untracked_count: 2,
-            head_commit: Some("4645f7a".to_string()),
-            upstream_commit: Some("9f64461".to_string()),
+            untracked_count: 0,
+            head_commit: None,
+            upstream_commit: None,
             is_clean: true,
-            agent_files_changed: 2,
-            agent_lines_added: 6,
+            agent_files_changed: 0,
+            agent_lines_added: 0,
         }
     }
 }
@@ -78,11 +78,11 @@ pub struct EngramTelemetry {
 impl Default for EngramTelemetry {
     fn default() -> Self {
         Self {
-            project_name: "telar-dev".to_string(),
-            port: 7437,
-            is_online: true,
-            observations_count: 27,
-            cloud_status: "solo local o no configurado".to_string(),
+            project_name: String::new(),
+            port: 0,
+            is_online: false,
+            observations_count: 0,
+            cloud_status: String::new(),
         }
     }
 }
@@ -98,10 +98,10 @@ pub struct ToolStats {
 impl Default for ToolStats {
     fn default() -> Self {
         Self {
-            total_calls: 324,
-            reads: 27,
-            writes: 2,
-            memory_ops: 4,
+            total_calls: 0,
+            reads: 0,
+            writes: 0,
+            memory_ops: 0,
         }
     }
 }
@@ -144,22 +144,22 @@ pub struct SessionLiveStats {
 impl Default for SessionLiveStats {
     fn default() -> Self {
         Self {
-            spent_cost: 0.154,
-            turns: 13,
-            elapsed_str: "7m44s".to_string(),
-            tokens_in: 46_000,
-            tokens_out: 1_900,
-            cache_hit_percent: 90,
-            cache_read_tokens: 434_000,
-            tool_calls: 8,
+            spent_cost: 0.0,
+            turns: 0,
+            elapsed_str: String::new(),
+            tokens_in: 0,
+            tokens_out: 0,
+            cache_hit_percent: 0,
+            cache_read_tokens: 0,
+            tool_calls: 0,
             tool_failures: 0,
-            subagent_runs: 3,
-            subagent_tokens: 343_000,
-            subagent_cost: 0.141,
-            model_name: "gpt-6.1-sol".to_string(),
-            model_turns: 13,
-            model_tokens: 481_000,
-            model_cost: 0.154,
+            subagent_runs: 0,
+            subagent_tokens: 0,
+            subagent_cost: 0.0,
+            model_name: String::new(),
+            model_turns: 0,
+            model_tokens: 0,
+            model_cost: 0.0,
         }
     }
 }
@@ -183,147 +183,18 @@ pub struct StatusSnapshot {
 impl Default for StatusSnapshot {
     fn default() -> Self {
         Self {
-            model_name: "gemini-3.8-flash-h".to_string(),
-            active_account: "agy2_1".to_string(),
-            project_days: 25,
+            model_name: String::new(),
+            active_account: String::new(),
+            project_days: 0,
             context: ContextUsage::default(),
-            accounts: vec![
-                AccountQuota {
-                    name: "agy".into(),
-                    percent: 100,
-                    is_leader: true,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk: 9 Wk:en 6d 2h".into(),
-                },
-                AccountQuota {
-                    name: "agy_1".into(),
-                    percent: 100,
-                    is_leader: false,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk:   Wk:en 1d 10h".into(),
-                },
-                AccountQuota {
-                    name: "agy_2".into(),
-                    percent: 100,
-                    is_leader: false,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk: 9 Wk:en 6d 3h".into(),
-                },
-                AccountQuota {
-                    name: "agy2".into(),
-                    percent: 100,
-                    is_leader: false,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk:   Wk:en 5d 12h".into(),
-                },
-                AccountQuota {
-                    name: "agy2_1".into(),
-                    percent: 97,
-                    is_leader: true,
-                    role_symbol: ">",
-                    quota_desc: " 97% Wk: 9 Wk:en 5d 4h".into(),
-                },
-                AccountQuota {
-                    name: "agy2_2".into(),
-                    percent: 99,
-                    is_leader: false,
-                    role_symbol: ">",
-                    quota_desc: " 99% Wk:   Wk:en 17h 28m".into(),
-                },
-                AccountQuota {
-                    name: "agy3".into(),
-                    percent: 100,
-                    is_leader: false,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk: 1 Wk:en 5d 12h".into(),
-                },
-                AccountQuota {
-                    name: "agy3_1".into(),
-                    percent: 99,
-                    is_leader: false,
-                    role_symbol: ">",
-                    quota_desc: " 99% Wk: 7 Wk:en 1d 6h".into(),
-                },
-                AccountQuota {
-                    name: "agy3_2".into(),
-                    percent: 100,
-                    is_leader: false,
-                    role_symbol: "•",
-                    quota_desc: "100% Wk: 9 Wk:en 2d 9h".into(),
-                },
-            ],
-            model_quotas: vec![
-                ModelQuota {
-                    model_name: "Gemini Wk".into(),
-                    window_type: "Wk".into(),
-                    indicator: "↑17%".into(),
-                    reset_in: "en 5d 4h".into(),
-                },
-                ModelQuota {
-                    model_name: "Gemini 5h".into(),
-                    window_type: "5h".into(),
-                    indicator: "~0%".into(),
-                    reset_in: "en 4h 52m".into(),
-                },
-                ModelQuota {
-                    model_name: "Claude Wk".into(),
-                    window_type: "Wk".into(),
-                    indicator: "1 ~0%".into(),
-                    reset_in: "en 6d 23h".into(),
-                },
-                ModelQuota {
-                    model_name: "Claude 5h".into(),
-                    window_type: "5h".into(),
-                    indicator: "1 ~0%".into(),
-                    reset_in: "en 4h 59m".into(),
-                },
-            ],
+            accounts: Vec::new(),
+            model_quotas: Vec::new(),
             git: GitSummary::default(),
             engram: EngramTelemetry::default(),
             tools: ToolStats::default(),
-            todos: vec![
-                SessionTodoItem {
-                    title: "Revisar interfaz y funcionalidades cotidianas con el subagente 1".into(),
-                    is_done: false,
-                    is_in_progress: true,
-                },
-                SessionTodoItem {
-                    title: "Revisar desarrollo, agentes y automatización".into(),
-                    is_done: false,
-                    is_in_progress: false,
-                },
-                SessionTodoItem {
-                    title: "Revisar permisos, memoria e integraciones".into(),
-                    is_done: false,
-                    is_in_progress: false,
-                },
-                SessionTodoItem {
-                    title: "Contrastar los tres informes y resumir funciones".into(),
-                    is_done: false,
-                    is_in_progress: false,
-                },
-            ],
+            todos: Vec::new(),
             live_stats: SessionLiveStats::default(),
-            mcp_servers: vec![
-                McpServerTelemetry {
-                    name: "context7".into(),
-                    scope: "[remote]",
-                    status: "en línea",
-                    is_online: true,
-                },
-                McpServerTelemetry {
-                    name: "engram".into(),
-                    scope: "[local]",
-                    status: "en línea",
-                    is_online: true,
-                },
-                McpServerTelemetry {
-                    name: "open-design".into(),
-                    scope: "[local]",
-                    status: "en línea",
-                    is_online: true,
-                },
-            ],
+            mcp_servers: Vec::new(),
         }
     }
 }

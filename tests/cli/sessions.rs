@@ -277,6 +277,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
         .args(["integration", "install", "pi"])
         .env("HERDR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
+        .env_remove("PI_CODING_AGENT_DIR")
         .output()
         .unwrap();
     assert_eq!(integration_install.status.code(), Some(0));
@@ -289,6 +290,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
         .args(["integration", "status"])
         .env("HERDR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
+        .env_remove("PI_CODING_AGENT_DIR")
         .output()
         .unwrap();
     assert_eq!(integration_status.status.code(), Some(0));
@@ -300,6 +302,7 @@ fn integration_commands_run_locally_when_server_is_missing() {
         .args(["integration", "uninstall", "pi"])
         .env("HERDR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
+        .env_remove("PI_CODING_AGENT_DIR")
         .output()
         .unwrap();
     assert_eq!(integration_uninstall.status.code(), Some(0));
@@ -332,6 +335,7 @@ fn integration_status_outdated_only_prints_action_for_legacy_install() {
         .args(["integration", "status", "--outdated-only"])
         .env("HERDR_SOCKET_PATH", &missing_socket)
         .env("HOME", &home_dir)
+        .env_remove("PI_CODING_AGENT_DIR")
         .output()
         .unwrap();
 

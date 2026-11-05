@@ -213,6 +213,92 @@ impl ClientShellState {
         self.overlay = Some(ClientShellOverlay::Navigator(navigator));
     }
 
+    pub(super) fn open_network_project_picker(&mut self) {
+        let mut candidate_root = None;
+
+        if let Some(snapshot) = self.snapshot.as_deref() {
+            if let Some(focused_ws) = snapshot.focused_workspace_id.as_deref().and_then(|id| {
+                snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
+            }) {
+                if self.config.is_network_path(&focused_ws.new_workspace_cwd) {
+                    let path = std::path::PathBuf::from(&focused_ws.new_workspace_cwd);
+                    if path.is_dir() {
+                        candidate_root = Some(path);
+                    }
+                }
+            }
+        }
+
+        if candidate_root.is_none() {
+            if let Some(snapshot) = self.snapshot.as_deref() {
+                for ws in &snapshot.workspaces {
+                    if self.config.is_network_path(&ws.new_workspace_cwd) {
+                        let path = std::path::PathBuf::from(&ws.new_workspace_cwd);
+                        if path.is_dir() {
+                            candidate_root = Some(path);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if candidate_root.is_none() {
+            for fallback in [
+                "/mnt/z",
+                "/mnt/projects",
+                "//192.168.10.150/projects",
+                r"\\192.168.10.150\projects",
+                "Z:\\",
+                "/mnt/share",
+            ] {
+                let p = std::path::PathBuf::from(fallback);
+                if p.is_dir() {
+                    candidate_root = Some(p);
+                    break;
+                }
+            }
+        }
+
+        let root_path = candidate_root.unwrap_or_else(|| {
+            std::path::PathBuf::from("/mnt/z")
+        });
+
+        let root_display = root_path.to_string_lossy().to_string();
+
+        let mut entries = Vec::new();
+        if let Ok(dir_entries) = std::fs::read_dir(&root_path) {
+            for entry in dir_entries.flatten() {
+                if entries.len() >= 100 {
+                    break;
+                }
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') || name == "node_modules" {
+                    continue;
+                }
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    entries.push(ClientNetworkProjectEntry {
+                        full_path: entry.path(),
+                        name,
+                    });
+                }
+            }
+        }
+        entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+        self.overlay = Some(ClientShellOverlay::NetworkProjectPicker(
+            ClientNetworkProjectPickerOverlay {
+                _root_path: root_path,
+                root_display,
+                entries,
+                selected: 0,
+                scroll_offset: 0,
+                query: TextEditor::default(),
+                _search_focused: true,
+            },
+        ));
+    }
+
     pub(super) fn move_navigator_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() else {
             return;
@@ -632,6 +718,60 @@ impl ClientShellState {
         }
 
         if self.route_worktree_overlay_key(key, outcome) {
+            return;
+        }
+
+        if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+            let (code, _modifiers) = crate::config::normalize_key_combo((key.code, key.modifiers));
+            match code {
+                KeyCode::Esc => {
+                    self.overlay = None;
+                    outcome.repaint = true;
+                    return;
+                }
+                KeyCode::Up => {
+                    picker.selected = picker.selected.saturating_sub(1);
+                    picker.ensure_selected_visible(16);
+                    outcome.repaint = true;
+                    return;
+                }
+                KeyCode::Down => {
+                    let max_idx = picker.filtered_indices().len().saturating_sub(1);
+                    picker.selected = (picker.selected + 1).min(max_idx);
+                    picker.ensure_selected_visible(16);
+                    outcome.repaint = true;
+                    return;
+                }
+                KeyCode::Enter => {
+                    if let Some(entry) = picker.selected_entry().cloned() {
+                        self.push_endpoint_method(
+                            crate::api::schema::Method::WorkspaceCreate(
+                                crate::api::schema::WorkspaceCreateParams {
+                                    source_workspace_id: self.workspace_action_id(),
+                                    cwd: Some(entry.full_path.to_string_lossy().to_string()),
+                                    focus: true,
+                                    label: Some(entry.name),
+                                    env: Default::default(),
+                                },
+                            ),
+                            outcome,
+                        );
+                        self.overlay = None;
+                        self.mode = ClientShellMode::Terminal;
+                        outcome.repaint = true;
+                        return;
+                    }
+                }
+                _ => {
+                    if let Some(content_changed) = picker.query.handle_key(key) {
+                        if content_changed {
+                            picker.selected = 0;
+                        }
+                        outcome.repaint = true;
+                        return;
+                    }
+                }
+            }
             return;
         }
         if matches!(self.overlay, Some(ClientShellOverlay::Navigator(_))) {

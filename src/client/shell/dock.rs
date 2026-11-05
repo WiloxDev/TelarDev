@@ -170,6 +170,98 @@ impl StatusTab {
         self.is_dirty = false;
     }
 
+    pub fn sync_agent_telemetry(&mut self, tokens: Option<&[(String, String)]>) {
+        let Some(tokens) = tokens else {
+            // Si el pane activo no tiene tokens, resetear la telemetría viva a default
+            self.telemetry.todos.clear();
+            self.telemetry.live_stats = super::telemetry::SessionLiveStats::default();
+            self.telemetry.context = super::telemetry::ContextUsage::default();
+            self.telemetry.model_name.clear();
+            self.telemetry.engram = super::telemetry::EngramTelemetry::default();
+            return;
+        };
+
+        let mut todos = Vec::new();
+        let mut has_stats_update = false;
+
+        for (k, v) in tokens {
+            if k == "profile" {
+                self.telemetry.model_name = v.clone();
+            } else if k == "ctx_pct" {
+                if let Ok(pct) = v.parse::<f32>() {
+                    self.telemetry.context.percent = pct;
+                }
+            } else if k == "ctx_tok" {
+                if let Ok(tok) = v.parse::<u64>() {
+                    self.telemetry.context.used_tokens = tok;
+                }
+            } else if k == "ctx_win" {
+                if let Ok(win) = v.parse::<u64>() {
+                    self.telemetry.context.limit_tokens = win;
+                }
+            } else if k == "engram_obs" {
+                if let Ok(count) = v.parse::<usize>() {
+                    self.telemetry.engram.observations_count = count;
+                    self.telemetry.engram.is_online = true;
+                }
+            } else if k == "cost" {
+                if let Ok(c) = v.parse::<f32>() {
+                    self.telemetry.live_stats.spent_cost = c;
+                    has_stats_update = true;
+                }
+            } else if k == "turns" {
+                if let Ok(t) = v.parse::<usize>() {
+                    self.telemetry.live_stats.turns = t;
+                    has_stats_update = true;
+                }
+            } else if k == "tok_in" {
+                if let Ok(tin) = v.parse::<u64>() {
+                    self.telemetry.live_stats.tokens_in = tin;
+                    has_stats_update = true;
+                }
+            } else if k == "tok_out" {
+                if let Ok(tout) = v.parse::<u64>() {
+                    self.telemetry.live_stats.tokens_out = tout;
+                    has_stats_update = true;
+                }
+            } else if k == "elapsed" {
+                self.telemetry.live_stats.elapsed_str = v.clone();
+                has_stats_update = true;
+            } else if k == "git_files" {
+                if let Ok(files) = v.parse::<usize>() {
+                    self.telemetry.git.agent_files_changed = files;
+                }
+            } else if k == "git_lines" {
+                if let Ok(lines) = v.parse::<usize>() {
+                    self.telemetry.git.agent_lines_added = lines;
+                }
+            } else if let Some(todo_idx_str) = k.strip_prefix("todo_") {
+                // Formato: "todo_1" => "done:Titulo" o "prog:Titulo" o "open:Titulo"
+                if let Some((status_prefix, title)) = v.split_once(':') {
+                    let is_done = status_prefix == "done";
+                    let is_in_progress = status_prefix == "prog";
+                    todos.push((
+                        todo_idx_str.parse::<usize>().unwrap_or(0),
+                        super::telemetry::SessionTodoItem {
+                            title: title.to_string(),
+                            is_done,
+                            is_in_progress,
+                        },
+                    ));
+                }
+            }
+        }
+
+        if !todos.is_empty() {
+            todos.sort_by_key(|(idx, _)| *idx);
+            self.telemetry.todos = todos.into_iter().map(|(_, item)| item).collect();
+        }
+
+        if has_stats_update {
+            self.telemetry.live_stats.model_name = self.telemetry.model_name.clone();
+        }
+    }
+
     pub fn mark_dirty(&mut self) {
         self.is_dirty = true;
     }
@@ -953,6 +1045,7 @@ pub(super) fn render_right_dock(
         let half_rows = available_rows / 2;
         if let Some(ctx) = context {
             dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+            dock_state.status_tab.sync_agent_telemetry(ctx.agent_tokens);
         }
         render_status_content(
             buffer,
@@ -993,6 +1086,7 @@ pub(super) fn render_right_dock(
             DockTabId::Status => {
                 if let Some(ctx) = context {
                     dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+                    dock_state.status_tab.sync_agent_telemetry(ctx.agent_tokens);
                 }
                 render_status_content(
                     buffer,
@@ -1153,14 +1247,17 @@ fn render_status_content(
     let mut cur_y = y;
     let bottom_limit = y + rows;
 
-    // 0. Modo preview indicador discreto
-    if is_preview && cur_y < bottom_limit {
+    // 0. Workspace info & Modo preview
+    if cur_y < bottom_limit {
+        let ws_style = Style::default().fg(config.palette.accent);
+        let preview_tag = if is_preview { " [Preview]" } else { "" };
+        let ws_disp = format!("● {ws_name}{preview_tag}");
         buffer.set_stringn(
             x + 1,
             cur_y,
-            "[Preview Mode]",
+            ws_disp,
             rail_w as usize,
-            Style::default().fg(config.palette.yellow),
+            ws_style,
         );
         cur_y += 1;
     }
@@ -1170,7 +1267,11 @@ fn render_status_content(
         let is_col = status_tab.is_collapsed(1);
         let done_count = status_tab.telemetry.todos.iter().filter(|t| t.is_done).count();
         let total_count = status_tab.telemetry.todos.len();
-        let count_tag = format!("{done_count}/{total_count}");
+        let count_tag = if total_count == 0 {
+            "no todos".to_string()
+        } else {
+            format!("{done_count}/{total_count}")
+        };
 
         render_panel_header_rail(
             buffer,
@@ -1188,37 +1289,55 @@ fn render_status_content(
         cur_y += 1;
 
         if !is_col {
-            for todo in &status_tab.telemetry.todos {
-                if cur_y >= bottom_limit.saturating_sub(1) {
-                    break;
+            if status_tab.telemetry.todos.is_empty() {
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        "no active todos",
+                        Some("/gentle:todo"),
+                        key_style,
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                    cur_y += 1;
                 }
-                let bullet = if todo.is_in_progress {
-                    "• "
-                } else if todo.is_done {
-                    "✓ "
-                } else {
-                    "○ "
-                };
-                let bullet_style = if todo.is_in_progress {
-                    Style::default().fg(config.palette.mauve)
-                } else if todo.is_done {
-                    Style::default().fg(config.palette.green)
-                } else {
-                    Style::default().fg(config.palette.overlay0)
-                };
-                let text_style = if todo.is_in_progress {
-                    Style::default().fg(config.palette.mauve)
-                } else if todo.is_done {
-                    Style::default().fg(config.palette.subtext0)
-                } else {
-                    val_text
-                };
+            } else {
+                for todo in &status_tab.telemetry.todos {
+                    if cur_y >= bottom_limit.saturating_sub(1) {
+                        break;
+                    }
+                    let bullet = if todo.is_in_progress {
+                        "• "
+                    } else if todo.is_done {
+                        "✓ "
+                    } else {
+                        "○ "
+                    };
+                    let bullet_style = if todo.is_in_progress {
+                        Style::default().fg(config.palette.mauve)
+                    } else if todo.is_done {
+                        Style::default().fg(config.palette.green)
+                    } else {
+                        Style::default().fg(config.palette.overlay0)
+                    };
+                    let text_style = if todo.is_in_progress {
+                        Style::default().fg(config.palette.mauve)
+                    } else if todo.is_done {
+                        Style::default().fg(config.palette.subtext0)
+                    } else {
+                        val_text
+                    };
 
-                buffer.set_string(x + 2, cur_y, bullet, bullet_style);
-                let title_x = x + 4;
-                let max_w = (rail_w.saturating_sub(4)) as usize;
-                buffer.set_stringn(title_x, cur_y, &todo.title, max_w, text_style);
-                cur_y += 1;
+                    buffer.set_string(x + 2, cur_y, bullet, bullet_style);
+                    let title_x = x + 4;
+                    let max_w = (rail_w.saturating_sub(4)) as usize;
+                    buffer.set_stringn(title_x, cur_y, &todo.title, max_w, text_style);
+                    cur_y += 1;
+                }
             }
             cur_y += 1; // Espacio vertical entre bloques
         }
@@ -1233,11 +1352,7 @@ fn render_status_content(
             .map(super::status_text)
             .unwrap_or("idle");
 
-        let agents_running_tag = if agent_st == "working" {
-            "2 running".to_string()
-        } else {
-            agent_st.to_string()
-        };
+        let agents_tag = agent_st.to_string();
 
         render_panel_header_rail(
             buffer,
@@ -1245,7 +1360,7 @@ fn render_status_content(
             cur_y,
             rail_w,
             "AGENTS",
-            Some(&agents_running_tag),
+            Some(&agents_tag),
             !is_col,
             header_style,
             tag_style,
@@ -1267,41 +1382,27 @@ fn render_status_content(
                         cur_y,
                         rail_w.saturating_sub(2),
                         "• ",
-                        &format!("{agent_disp} (Permisos e integraciones)"),
-                        Some("explore 97k 37s"),
+                        agent_disp,
+                        Some("working"),
                         Style::default().fg(config.palette.mauve),
                         Style::default().fg(config.palette.mauve),
                         val_dim,
                     );
                     cur_y += 1;
                 }
+            } else if agent_st == "blocked" || agent_st == "waiting" {
                 if cur_y < bottom_limit {
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
                         cur_y,
                         rail_w.saturating_sub(2),
-                        "• ",
-                        "Desarrollo y automatización",
-                        Some("explore 100k 37s"),
-                        Style::default().fg(config.palette.mauve),
-                        val_text,
+                        "▲ ",
+                        agent_disp,
+                        Some(agent_st),
+                        Style::default().fg(config.palette.peach),
+                        Style::default().fg(config.palette.peach),
                         val_dim,
-                    );
-                    cur_y += 1;
-                }
-                if cur_y < bottom_limit {
-                    render_panel_kv_rail(
-                        buffer,
-                        x + 2,
-                        cur_y,
-                        rail_w.saturating_sub(2),
-                        "✓ ",
-                        "1 done",
-                        Some("/gentle:agents"),
-                        Style::default().fg(config.palette.green),
-                        val_dim,
-                        Style::default().fg(config.palette.overlay0),
                     );
                     cur_y += 1;
                 }
@@ -1330,11 +1431,19 @@ fn render_status_content(
     if config.right_dock_show_git && cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(3);
         let files_changed = status_tab.telemetry.git.agent_files_changed;
+        let ahead_behind = context.and_then(|c| c.git_ahead_behind);
+        
         let changes_tag = if branch_name != "unavailable" {
+            let ab_str = match ahead_behind {
+                Some((ahead, behind)) if ahead > 0 && behind > 0 => format!(" · ↑{ahead} ↓{behind}"),
+                Some((ahead, 0)) if ahead > 0 => format!(" · ↑{ahead}"),
+                Some((0, behind)) if behind > 0 => format!(" · ↓{behind}"),
+                _ => String::new(),
+            };
             if files_changed == 0 {
-                format!("{branch_name} · clean")
+                format!("{branch_name}{ab_str} · clean")
             } else {
-                format!("{branch_name} · {files_changed} files")
+                format!("{branch_name}{ab_str} · {files_changed} files")
             }
         } else if files_changed == 0 {
             "clean".to_string()
@@ -1360,20 +1469,33 @@ fn render_status_content(
         if !is_col {
             if cur_y < bottom_limit {
                 if files_changed == 0 {
+                    let clean_label = match ahead_behind {
+                        Some((ahead, behind)) if ahead > 0 || behind > 0 => {
+                            let mut parts = Vec::new();
+                            if ahead > 0 {
+                                parts.push(format!("{ahead} ahead"));
+                            }
+                            if behind > 0 {
+                                parts.push(format!("{behind} behind"));
+                            }
+                            format!("clean · {}", parts.join(", "))
+                        }
+                        _ => "working tree clean".to_string(),
+                    };
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
                         cur_y,
                         rail_w.saturating_sub(2),
                         "",
-                        "no captured changes",
+                        &clean_label,
                         Some("/gentle:changes"),
                         key_style,
                         val_dim,
                         Style::default().fg(config.palette.overlay0),
                     );
                 } else {
-                    let diff_str = format!("+{} −{}", status_tab.telemetry.git.agent_lines_added, status_tab.telemetry.git.modified_count);
+                    let diff_str = format!("+{} lines · {} files", status_tab.telemetry.git.agent_lines_added, files_changed);
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
@@ -1397,7 +1519,12 @@ fn render_status_content(
     if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(4);
         let stats = &status_tab.telemetry.live_stats;
-        let cost_tag = format!("${:.3} sub", stats.spent_cost);
+        let has_live_stats = stats.turns > 0 || stats.spent_cost > 0.0 || stats.tokens_in > 0;
+        let cost_tag = if has_live_stats {
+            format!("${:.3} sub", stats.spent_cost)
+        } else {
+            "no telemetry".to_string()
+        };
 
         render_panel_header_rail(
             buffer,
@@ -1415,124 +1542,170 @@ fn render_status_content(
         cur_y += 1;
 
         if !is_col {
-            // spent
-            if cur_y < bottom_limit {
-                let spent_str = format!("${:.3} sub", stats.spent_cost);
-                let right_turns = format!("{} turns · {}", stats.turns, stats.elapsed_str);
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "spent   ",
-                    &spent_str,
-                    Some(&right_turns),
-                    key_style,
-                    val_text,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
+            if !has_live_stats {
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        "not reported",
+                        Some("/gentle:stats"),
+                        key_style,
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                    cur_y += 1;
+                }
+            } else {
+                // spent
+                if cur_y < bottom_limit {
+                    let spent_str = format!("${:.3} sub", stats.spent_cost);
+                    let right_turns = if stats.elapsed_str.is_empty() {
+                        format!("{} turns", stats.turns)
+                    } else {
+                        format!("{} turns · {}", stats.turns, stats.elapsed_str)
+                    };
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "spent   ",
+                        &spent_str,
+                        Some(&right_turns),
+                        key_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
 
-            // tokens
-            if cur_y < bottom_limit {
-                let in_k = format!("in {}k", stats.tokens_in / 1000);
-                let out_k = format!("out {:.1}k", stats.tokens_out as f32 / 1000.0);
-                let tok_str = format!("{in_k} · {out_k}");
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "tokens  ",
-                    &tok_str,
-                    None,
-                    key_style,
-                    val_text,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
+                // context (si fue reportado activamente por la sesión)
+                if status_tab.telemetry.context.limit_tokens > 0 && cur_y < bottom_limit {
+                    let ctx_pct = status_tab.telemetry.context.percent as u32;
+                    let ctx_str = format!(
+                        "{}% · {}k/{}k",
+                        ctx_pct,
+                        status_tab.telemetry.context.used_tokens / 1000,
+                        status_tab.telemetry.context.limit_tokens / 1000
+                    );
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "context ",
+                        &ctx_str,
+                        None,
+                        key_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
 
-            // cache
-            if cur_y < bottom_limit {
-                let cache_str = format!("{}% hit · {}k read", stats.cache_hit_percent, stats.cache_read_tokens / 1000);
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "cache   ",
-                    &cache_str,
-                    None,
-                    key_style,
-                    val_text,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
+                // tokens
+                if cur_y < bottom_limit {
+                    let in_k = format!("in {}k", stats.tokens_in / 1000);
+                    let out_k = format!("out {:.1}k", stats.tokens_out as f32 / 1000.0);
+                    let tok_str = format!("{in_k} · {out_k}");
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "tokens  ",
+                        &tok_str,
+                        None,
+                        key_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
 
-            // tools
-            if cur_y < bottom_limit {
-                let tools_str = if stats.tool_failures > 0 {
-                    format!("{} calls · {} failed", stats.tool_calls, stats.tool_failures)
-                } else {
-                    format!("{} calls", stats.tool_calls)
-                };
-                let tool_val_style = if stats.tool_failures > 0 {
-                    Style::default().fg(config.palette.yellow)
-                } else {
-                    val_text
-                };
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "tools   ",
-                    &tools_str,
-                    None,
-                    key_style,
-                    tool_val_style,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
+                // cache (sólo si fue reportado > 0)
+                if stats.cache_read_tokens > 0 && cur_y < bottom_limit {
+                    let cache_str = format!("{}% hit · {}k read", stats.cache_hit_percent, stats.cache_read_tokens / 1000);
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "cache   ",
+                        &cache_str,
+                        None,
+                        key_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
 
-            // agents
-            if cur_y < bottom_limit {
-                let ag_str = format!("{} runs · {}k · ${:.3} sub", stats.subagent_runs, stats.subagent_tokens / 1000, stats.subagent_cost);
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "agents  ",
-                    &ag_str,
-                    None,
-                    key_style,
-                    val_text,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
+                // tools (sólo si hubo calls reportadas)
+                if stats.tool_calls > 0 && cur_y < bottom_limit {
+                    let tools_str = if stats.tool_failures > 0 {
+                        format!("{} calls · {} failed", stats.tool_calls, stats.tool_failures)
+                    } else {
+                        format!("{} calls", stats.tool_calls)
+                    };
+                    let tool_val_style = if stats.tool_failures > 0 {
+                        Style::default().fg(config.palette.yellow)
+                    } else {
+                        val_text
+                    };
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "tools   ",
+                        &tools_str,
+                        None,
+                        key_style,
+                        tool_val_style,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
 
-            // model breakdown
-            if cur_y < bottom_limit {
-                let mod_desc = format!("{} turns · {}k · ${:.3} sub", stats.model_turns, stats.model_tokens / 1000, stats.model_cost);
-                render_panel_kv_rail(
-                    buffer,
-                    x + 2,
-                    cur_y,
-                    rail_w.saturating_sub(2),
-                    "",
-                    &stats.model_name,
-                    Some(&mod_desc),
-                    key_style,
-                    val_accent,
-                    val_dim,
-                );
-                cur_y += 1;
+                // agents / subagents (sólo si hubo subagents ejecutados)
+                if stats.subagent_runs > 0 && cur_y < bottom_limit {
+                    let ag_str = format!("{} runs · {}k · ${:.3} sub", stats.subagent_runs, stats.subagent_tokens / 1000, stats.subagent_cost);
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "agents  ",
+                        &ag_str,
+                        None,
+                        key_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
+
+                // model breakdown
+                if cur_y < bottom_limit && !stats.model_name.is_empty() {
+                    let mod_desc = format!("{} turns · {}k · ${:.3} sub", stats.model_turns, stats.model_tokens / 1000, stats.model_cost);
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        &stats.model_name,
+                        Some(&mod_desc),
+                        key_style,
+                        val_accent,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
             }
 
             cur_y += 1;
@@ -1542,8 +1715,12 @@ fn render_status_content(
     // 5. SECCIÓN: INTEGRATIONS (Sección 5)
     if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(5);
-        let mcp_count = status_tab.telemetry.mcp_servers.len().max(2);
-        let int_count_str = mcp_count.to_string();
+        let mcp_count = status_tab.telemetry.mcp_servers.len();
+        let int_count_str = if mcp_count == 0 {
+            "0".to_string()
+        } else {
+            mcp_count.to_string()
+        };
 
         render_panel_header_rail(
             buffer,
@@ -1561,34 +1738,16 @@ fn render_status_content(
         cur_y += 1;
 
         if !is_col {
-            if cur_y < bottom_limit {
+            let has_profile = !status_tab.telemetry.model_name.is_empty();
+            let has_engram = status_tab.telemetry.engram.is_online || status_tab.telemetry.engram.observations_count > 0;
+
+            if has_profile && cur_y < bottom_limit {
                 let profile_str = format!("Agent profile: {}", status_tab.telemetry.model_name);
                 buffer.set_stringn(x + 2, cur_y, profile_str, rail_w.saturating_sub(2) as usize, val_dim);
                 cur_y += 1;
             }
 
-            if cur_y < bottom_limit {
-                buffer.set_stringn(
-                    x + 2,
-                    cur_y,
-                    "- permissions no permission prompts; private",
-                    rail_w.saturating_sub(2) as usize,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
-            if cur_y < bottom_limit {
-                buffer.set_stringn(
-                    x + 4,
-                    cur_y,
-                    "paths stay blocked",
-                    rail_w.saturating_sub(4) as usize,
-                    val_dim,
-                );
-                cur_y += 1;
-            }
-
-            if cur_y < bottom_limit {
+            if has_engram && cur_y < bottom_limit {
                 let obs_id = status_tab.telemetry.engram.observations_count;
                 let mem_str = format!("- 🧠 {ws_name} · ✓ saved #{obs_id}");
                 buffer.set_stringn(
@@ -1599,6 +1758,48 @@ fn render_status_content(
                     Style::default().fg(config.palette.mauve),
                 );
                 cur_y += 1;
+            }
+
+            if mcp_count == 0 && !has_profile && !has_engram {
+                if cur_y < bottom_limit {
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "",
+                        "none connected",
+                        Some("/gentle:mcp"),
+                        key_style,
+                        val_dim,
+                        Style::default().fg(config.palette.overlay0),
+                    );
+                    cur_y += 1;
+                }
+            } else {
+                for mcp in &status_tab.telemetry.mcp_servers {
+                    if cur_y >= bottom_limit {
+                        break;
+                    }
+                    let mcp_style = if mcp.is_online {
+                        Style::default().fg(config.palette.green)
+                    } else {
+                        val_dim
+                    };
+                    render_panel_kv_rail(
+                        buffer,
+                        x + 2,
+                        cur_y,
+                        rail_w.saturating_sub(2),
+                        "• ",
+                        &mcp.name,
+                        Some(mcp.status),
+                        mcp_style,
+                        val_text,
+                        val_dim,
+                    );
+                    cur_y += 1;
+                }
             }
 
             cur_y += 1;
@@ -2196,9 +2397,9 @@ mod tests {
         );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("telar"));
-        assert!(text.contains("2 running"));
-        assert!(text.contains("spent"));
-        assert!(text.contains("tokens"));
+        assert!(text.contains("pi"));
+        assert!(text.contains("working"));
+        assert!(text.contains("not reported"));
     }
 
     #[test]
@@ -2768,6 +2969,112 @@ mod tests {
     }
 
     #[test]
+    fn test_status_tab_sync_agent_telemetry_parses_tokens() {
+        let mut status = StatusTab::new();
+        let tokens = vec![
+            ("profile".to_string(), "claude-3-7-sonnet".to_string()),
+            ("cost".to_string(), "0.412".to_string()),
+            ("turns".to_string(), "14".to_string()),
+            ("tok_in".to_string(), "45000".to_string()),
+            ("tok_out".to_string(), "3200".to_string()),
+            ("elapsed".to_string(), "2m 15s".to_string()),
+            ("engram_obs".to_string(), "42".to_string()),
+            ("todo_1".to_string(), "done:Preparar entorno".to_string()),
+            ("todo_2".to_string(), "prog:Implementar sincronización".to_string()),
+            ("todo_3".to_string(), "open:Verificar tests".to_string()),
+        ];
+
+        status.sync_agent_telemetry(Some(&tokens));
+
+        assert_eq!(status.telemetry.model_name, "claude-3-7-sonnet");
+        assert_eq!(status.telemetry.live_stats.spent_cost, 0.412);
+        assert_eq!(status.telemetry.live_stats.turns, 14);
+        assert_eq!(status.telemetry.live_stats.tokens_in, 45000);
+        assert_eq!(status.telemetry.live_stats.tokens_out, 3200);
+        assert_eq!(status.telemetry.live_stats.elapsed_str, "2m 15s");
+        assert_eq!(status.telemetry.engram.observations_count, 42);
+        assert!(status.telemetry.engram.is_online);
+
+        assert_eq!(status.telemetry.todos.len(), 3);
+        assert_eq!(status.telemetry.todos[0].title, "Preparar entorno");
+        assert!(status.telemetry.todos[0].is_done);
+        assert!(!status.telemetry.todos[0].is_in_progress);
+
+        assert_eq!(status.telemetry.todos[1].title, "Implementar sincronización");
+        assert!(!status.telemetry.todos[1].is_done);
+        assert!(status.telemetry.todos[1].is_in_progress);
+
+        assert_eq!(status.telemetry.todos[2].title, "Verificar tests");
+        assert!(!status.telemetry.todos[2].is_done);
+        assert!(!status.telemetry.todos[2].is_in_progress);
+    }
+
+    #[test]
+    fn test_status_tab_sync_agent_telemetry_handles_context_and_clears_on_none() {
+        let mut status = StatusTab::new();
+        let tokens = vec![
+            ("profile".to_string(), "claude-3-7-sonnet".to_string()),
+            ("ctx_pct".to_string(), "42".to_string()),
+            ("ctx_tok".to_string(), "84000".to_string()),
+            ("ctx_win".to_string(), "200000".to_string()),
+            ("cost".to_string(), "0.50".to_string()),
+        ];
+
+        status.sync_agent_telemetry(Some(&tokens));
+        assert_eq!(status.telemetry.context.percent, 42.0);
+        assert_eq!(status.telemetry.context.used_tokens, 84000);
+        assert_eq!(status.telemetry.context.limit_tokens, 200000);
+        assert_eq!(status.telemetry.live_stats.spent_cost, 0.50);
+
+        // Al cambiar de pane o pasar None, debe resetear a estado neutral
+        status.sync_agent_telemetry(None);
+        assert_eq!(status.telemetry.context.percent, 0.0);
+        assert_eq!(status.telemetry.context.used_tokens, 0);
+        assert_eq!(status.telemetry.context.limit_tokens, 0);
+        assert_eq!(status.telemetry.live_stats.spent_cost, 0.0);
+        assert_eq!(status.telemetry.model_name, "");
+    }
+
+    #[test]
+    fn test_render_status_content_shows_blocked_agent_in_agents_section() {
+        let area = Rect::new(0, 0, 50, 30);
+        let mut buffer = Buffer::empty(area);
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut status_tab = StatusTab::new();
+
+        let context = WorkspaceContext {
+            workspace_id: "test-ws",
+            workspace_name: "telar",
+            root_path: Path::new("/"),
+            branch: Some("feat/login"),
+            git_ahead_behind: None,
+            is_preview: false,
+            agent_status: Some(crate::api::schema::AgentStatus::Blocked),
+            agent_name: Some("gentle-ai"),
+            agent_tokens: None,
+            siblings: Vec::new(),
+        };
+
+        render_status_content(
+            &mut buffer,
+            0,
+            0,
+            30,
+            50,
+            &config,
+            Some(&context),
+            &mut status_tab,
+            None,
+        );
+
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        assert!(text.contains("AGENTS"), "Must contain AGENTS header");
+        assert!(text.contains("blocked"), "Must display blocked tag");
+        assert!(text.contains("gentle-ai"), "Must display agent name gentle-ai");
+        assert!(text.contains("▲"), "Must display warning triangle for blocked agent");
+    }
+
+    #[test]
     fn test_git_flow_tab_renders_live_timeline_and_scroll() {
         let mut dock = RightDockState::default();
         dock.select_tab(DockTabId::GitFlow);
@@ -2955,5 +3262,18 @@ mod tests {
             has_workspace_create,
             "pressing 'w' on a directory must dispatch WorkspaceCreate for that folder"
         );
+    }
+
+    #[test]
+    fn test_status_tab_sync_agent_telemetry_parses_git_changes_tokens() {
+        let mut status = StatusTab::new();
+        let tokens = vec![
+            ("git_files".to_string(), "3".to_string()),
+            ("git_lines".to_string(), "48".to_string()),
+        ];
+        status.sync_agent_telemetry(Some(&tokens));
+
+        assert_eq!(status.telemetry.git.agent_files_changed, 3);
+        assert_eq!(status.telemetry.git.agent_lines_added, 48);
     }
 }
