@@ -12,8 +12,8 @@ use super::state::ClientShellConfig;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DockTabId {
     #[default]
-    Status,
     Files,
+    Status,
     GitFlow,
 }
 
@@ -41,17 +41,17 @@ impl DockTabId {
 
     pub fn next(self) -> Self {
         match self {
-            Self::Status => Self::Files,
-            Self::Files => Self::GitFlow,
-            Self::GitFlow => Self::Status,
+            Self::Files => Self::Status,
+            Self::Status => Self::GitFlow,
+            Self::GitFlow => Self::Files,
         }
     }
 
     pub fn prev(self) -> Self {
         match self {
-            Self::Status => Self::GitFlow,
-            Self::Files => Self::Status,
-            Self::GitFlow => Self::Files,
+            Self::Files => Self::GitFlow,
+            Self::Status => Self::Files,
+            Self::GitFlow => Self::Status,
         }
     }
 }
@@ -963,14 +963,14 @@ pub(super) fn render_right_dock(
             };
 
             if area.height >= 2 {
-                buffer.set_string(icon_x, area.y + 1, "⚡", Style::default().fg(status_color));
+                buffer.set_string(icon_x, area.y + 1, "📁", Style::default().fg(files_color));
                 hits.right_dock_tabs
-                    .push((Rect::new(icon_x, area.y + 1, 2, 1), DockTabId::Status));
+                    .push((Rect::new(icon_x, area.y + 1, 2, 1), DockTabId::Files));
             }
             if area.height >= 4 {
-                buffer.set_string(icon_x, area.y + 3, "📁", Style::default().fg(files_color));
+                buffer.set_string(icon_x, area.y + 3, "⚡", Style::default().fg(status_color));
                 hits.right_dock_tabs
-                    .push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Files));
+                    .push((Rect::new(icon_x, area.y + 3, 2, 1), DockTabId::Status));
             }
             if area.height >= 6 {
                 buffer.set_string(icon_x, area.y + 5, "⎇", Style::default().fg(git_flow_color));
@@ -1036,14 +1036,14 @@ pub(super) fn render_right_dock(
         area.right()
     };
 
-    buffer.set_string(content_x, tab_y, " ⚡ Status ", status_style);
+    buffer.set_string(content_x, tab_y, " 📁 Files ", files_style);
     hits.right_dock_tabs
-        .push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Status));
+        .push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Files));
 
     if content_x + 22 <= tab_right_limit {
-        buffer.set_string(content_x + 11, tab_y, " 📁 Files ", files_style);
+        buffer.set_string(content_x + 11, tab_y, " ⚡ Status ", status_style);
         hits.right_dock_tabs
-            .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
+            .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Status));
     }
     if content_x + 32 <= tab_right_limit {
         buffer.set_string(content_x + 22, tab_y, " ⎇ Flow ", git_flow_style);
@@ -2547,14 +2547,14 @@ mod tests {
     #[test]
     fn test_dock_tab_lifecycle_hibernation_and_dirty() {
         let mut dock = RightDockState::default();
-        assert_eq!(dock.active_tab, DockTabId::Status);
-
-        // Al cambiar a Files, Files pasa a dirty
-        dock.select_tab(DockTabId::Files);
         assert_eq!(dock.active_tab, DockTabId::Files);
-        assert!(dock.files_tab.is_dirty());
 
-        // Al cambiar a GitFlow, Files se hiberna y GitFlow pasa a dirty
+        // Al cambiar a Status, Status pasa a dirty
+        dock.select_tab(DockTabId::Status);
+        assert_eq!(dock.active_tab, DockTabId::Status);
+        assert!(dock.status_tab.is_dirty());
+
+        // Al cambiar a GitFlow, Status se hiberna y GitFlow pasa a dirty
         dock.select_tab(DockTabId::GitFlow);
         assert_eq!(dock.active_tab, DockTabId::GitFlow);
         assert!(dock.git_flow_tab.is_dirty());
@@ -2780,8 +2780,8 @@ mod tests {
 
         assert_eq!(hits.right_dock_area, area);
         assert_eq!(hits.right_dock_tabs.len(), 3);
-        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
-        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Status);
         assert_eq!(hits.right_dock_tabs[2].1, DockTabId::GitFlow);
         assert_ne!(hits.right_dock_split_toggle, Rect::default());
         assert!(!hits.right_dock_file_rows.is_empty());
@@ -2800,8 +2800,8 @@ mod tests {
 
         assert_eq!(hits.right_dock_area, area);
         assert_eq!(hits.right_dock_tabs.len(), 3);
-        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Status);
-        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[0].1, DockTabId::Files);
+        assert_eq!(hits.right_dock_tabs[1].1, DockTabId::Status);
         assert_eq!(hits.right_dock_tabs[2].1, DockTabId::GitFlow);
     }
 
