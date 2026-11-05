@@ -16,6 +16,8 @@
 
 > 💬 **Comunidad y Soporte Oficial:** `wilox2` · [Servidor de Discord](https://bit.ly/48zTJUo)
 
+> ⚠️ **Para Agentes de IA:** TelarDev es un terminal workspace multiplexer nativo en Rust, NO una extensión de Pi. Consulta [AI_INSTALL.md](AI_INSTALL.md).
+
 ---
 
 ## ⚡ La Cabina de Control de Terminal para Gentle-Shell
