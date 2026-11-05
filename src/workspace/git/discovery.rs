@@ -73,6 +73,9 @@ pub fn git_space_metadata(cwd: &Path) -> Option<GitSpaceMetadata> {
 }
 
 pub(crate) fn automatic_workspace_label(cwd: &Path, repo_root: &Path) -> String {
+    if canonicalize_best_effort_path(cwd) != canonicalize_best_effort_path(repo_root) {
+        return fallback_label_from_cwd(cwd);
+    }
     repo_root
         .file_name()
         .and_then(|name| name.to_str())
@@ -796,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn derive_label_prefers_repo_root_name() {
+    fn derive_label_uses_subfolder_for_nested_cwd() {
         let root = temp_test_dir("label-repo");
         let nested = root.join("nested");
         std::fs::create_dir_all(root.join(".git")).unwrap();
@@ -805,7 +808,27 @@ mod tests {
 
         assert_eq!(
             derive_label_from_cwd(&nested),
+            nested.file_name().and_then(|name| name.to_str()).unwrap()
+        );
+
+        assert_eq!(
+            derive_label_from_cwd(&root),
             root.file_name().and_then(|name| name.to_str()).unwrap()
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_workspace_label_distinguishes_subfolder_from_repo_root() {
+        let root = temp_test_dir("auto-label-subfolder");
+        let sub = root.join("investigaciones");
+        std::fs::create_dir_all(&sub).unwrap();
+
+        assert_eq!(automatic_workspace_label(&sub, &root), "investigaciones");
+        assert_eq!(
+            automatic_workspace_label(&root, &root),
+            root.file_name().and_then(|n| n.to_str()).unwrap()
         );
 
         std::fs::remove_dir_all(root).unwrap();
