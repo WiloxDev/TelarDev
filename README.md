@@ -9,68 +9,111 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-666666?labelColor=333333" alt="Apache 2.0 license" /></a>
-  <a href="https://github.com/WiloxDev/TelarDev"><img src="https://img.shields.io/badge/Gentle--Hub-Project-e06c75?labelColor=282c34&logo=github" alt="Gentle-Hub Project" /></a>
-  <a href="https://github.com/WiloxDev/TelarDev/stargazers"><img src="https://img.shields.io/github/stars/WiloxDev/TelarDev?labelColor=333333&color=666666" alt="GitHub stars" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-666666?style=for-the-badge&labelColor=333333" alt="Apache 2.0 license" /></a>
+  <a href="https://gentlemanprogramming.com/gentle-hub/"><img src="https://img.shields.io/badge/Gentle%20Hub-Project-F095C8?style=for-the-badge" alt="Gentle-Hub Project" /></a>
+  <a href="https://bit.ly/48zTJUo"><img src="https://img.shields.io/badge/Discord-Apoyo-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Support" /></a>
 </p>
+
+> 💬 **Comunidad y Soporte Oficial:** `wilox2` · [Servidor de Discord](https://bit.ly/48zTJUo)
 
 ---
 
 ## ⚡ La Cabina de Control de Terminal para Gentle-Shell
 
-**TelarDev** es un multiplexor de terminal nativo en Rust con arquitectura cliente-servidor PTY ultra rápida, diseñado como el centro de mando operativo para programadores intensivos en el ecosistema Gentle-Shell.
+**TelarDev** es un multiplexor de terminal nativo en Rust con arquitectura cliente-servidor PTY ultra rápida, diseñado como el centro de mando operativo para programadores intensivos en el ecosistema **Gentle-Shell** y **Pi**.
 
-- 🗂 **Sidebar Lateral Derecho**:
-  - **⚡ Status**: Telemetría viva de cuotas, tokens, consumo de contexto y estado de agentes (`working`, `blocked`, `idle`).
-  - **📁 Files**: Explorador interactivo con jerarquía en árbol, iconos Seti UI y atajo directo para convertir cualquier carpeta en un espacio de trabajo aislado.
-  - **⎇ Git Flow**: Línea de tiempo visual e interactiva de commits, ramas `ahead/behind`, tags, stash, cherry-pick y rebase en vivo.
-- 🚀 **Nativo en Rust, Cero Electron**: Desempeño instantáneo, sin sobrecarga de memoria ni lag de renderizado.
-- 🔌 **Integración Profunda con Gentle-Shell**: Sincronización continua de estado con agentes a través de sockets IPC locales.
-- 🖱 **Teclado y Ratón de Primera Clase**: Atajos tipo tmux/prefix combinados con clics, arrastre, redimensionado y selección fluida.
+```
+┌───────────────────────────────────────────────────┬───────────────────────────────┐
+│              TERMINAL PRINCIPAL GENTLE SHELL      │   SIDEBAR DERECHO TELARDEV    │
+│                                                   │                               │
+│  $ gentle-shell                                   │  ⚡ STATUS                    │
+│  Gentle Shell v1.4 • Model: cpamc/claude-3-5      │  • Cuota 5h: [████░░░] 34%   │
+│                                                   │  • Contexto: 🟢 42k / 200k   │
+│  [Turno #12] Agente aplicando refactorización... │  • Estado: 🟢 Working (Pi)   │
+│  ✓ 3 archivos editados con éxito                  ├───────────────────────────────┤
+│                                                   │  📁 EXPLORADOR DE ARCHIVOS    │
+│                                                   │  ▾ src/                       │
+│                                                   │    index.ts                   │
+│                                                   │    provider.ts                │
+│                                                   │    types.ts                   │
+│                                                   ├───────────────────────────────┤
+│                                                   │  ⎇ GIT FLOW VISUAL            │
+│                                                   │  * main (origin/main)         │
+│                                                   │  | feat: universal wsl bridge │
+│                                                   │  * fix: native stream dl      │
+└───────────────────────────────────────────────────┴───────────────────────────────┘
+```
 
 ---
 
-## install
+## 🌟 Características Principales
 
+- 🗂 **Sidebar Lateral Derecho de 3 Vistas**:
+  - **⚡ Status**: Telemetría viva de cuotas de tokens, consumo de contexto de `gentle-context-lens` y estado de agentes (`working`, `blocked`, `idle`).
+  - **📁 Files**: Explorador interactivo con jerarquía en árbol, iconos Seti UI y navegación rápida por directorios.
+  - **⎇ Git Flow**: Línea de tiempo visual interactiva de commits, ramas `ahead/behind`, tags, stash y cambios pendientes.
+- 🚀 **Nativo en Rust, Cero Electron**: Máxima tasa de cuadros por segundo, latencia cero y consumo mínimo de memoria RAM.
+- 🔌 **Integración Profunda con Gentle-Shell**: Sincronización continua de estado con agentes a través de sockets IPC locales.
+- 🖱 **Soporte Completo de Ratón y Teclado**: Atajos ergonómicos combinados con clics, selección y arrastre de paneles.
+
+---
+
+## ⌨️ Atajos de Teclado Esenciales
+
+El prefijo por defecto es `Ctrl + B`:
+
+| Atajo | Acción |
+| :--- | :--- |
+| `Ctrl + B` luego `"` | Dividir terminal horizontalmente |
+| `Ctrl + B` luego `%` | Dividir terminal verticalmente |
+| `Ctrl + B` luego `Flechas` | Mover foco entre paneles de terminal |
+| `Ctrl + B` luego `S` | Alternar visibilidad del Sidebar Derecho (Status / Files / Git) |
+| `Ctrl + B` luego `Z` | Maximizar / Restaurar panel actual a pantalla completa |
+| `Ctrl + B` luego `D` | Desconectar sesión (Detach) sin detener los agentes en segundo plano |
+
+---
+
+## 📦 Compilación e Instalación
+
+### Compilación desde el código fuente (Rust >= 1.75):
 ```bash
-curl -fsSL https://herdr.dev/install.sh | sh
-```
-
-or `brew install herdr` · `mise use -g herdr` · windows: `powershell -ExecutionPolicy Bypass -c "irm https://herdr.dev/install.ps1 | iex"` · [endpoint-protected Windows](https://herdr.dev/docs/windows-beta/) · [binaries](https://github.com/herdrdev/herdr/releases)
-
-then start it where the work lives:
-
-```bash
-herdr
-```
-
-run your agents, split panes, walk away. `ctrl+b q` detaches, `herdr` reattaches. [quick start →](https://herdr.dev/docs/quick-start/)
-
-## docs
-
-everything lives at [herdr.dev/docs](https://herdr.dev/docs/): [quick start](https://herdr.dev/docs/quick-start/) · [concepts](https://herdr.dev/docs/concepts/) · [supported agents](https://herdr.dev/docs/agents/) · [keyboard](https://herdr.dev/docs/keyboard/) · [configuration](https://herdr.dev/docs/configuration/) · [session state](https://herdr.dev/docs/session-state/) · [connecting machines](https://herdr.dev/docs/connecting-machines/) · [remote](https://herdr.dev/docs/persistence-remote/) · [integrations](https://herdr.dev/docs/integrations/) · [add herdr support to your agent](https://herdr.dev/docs/add-herdr-support/) · [plugins](https://herdr.dev/docs/plugins/) · [socket api](https://herdr.dev/docs/socket-api/)
-
-## thanks
-
-every past sponsor and backer is listed in [SPONSORS.md](./SPONSORS.md) — thank you 🐑
-
-enterprise / partnership: hey@herdr.dev
-
-## agent instructions
-
-if you are an ai agent helping with this repository, read [`AGENTS.md`](./AGENTS.md) before making changes and read [`CONTRIBUTING.md`](./CONTRIBUTING.md) before opening issues or PRs.
-
-## development
-
-```bash
-git clone https://github.com/herdrdev/herdr
-cd herdr
+git clone https://github.com/WiloxDev/TelarDev.git
+cd TelarDev
 cargo build --release
+```
+El ejecutable binario resultante se ubicará en `./target/release/telardev`.
 
-just test        # unit tests
-just check       # formatting, tests, and maintenance checks
+Para moverlo a tu PATH del sistema:
+```bash
+sudo cp target/release/telardev /usr/local/bin/
 ```
 
-## license
+---
 
-Herdr is licensed under the [Apache License 2.0](LICENSE).
+## 🚀 Inicio Rápido
+
+Inicia TelarDev en la carpeta de tu proyecto:
+```bash
+telardev
+```
+Y dentro de la terminal principal lanza **Gentle Shell**:
+```bash
+gentle-shell
+```
+El sidebar derecho detectará automáticamente las sesiones activas y comenzará a reportar telemetría de cuotas y estado en tiempo real.
+
+---
+
+## 🌐 Ecosistema de la Suite WiloxDev para Gentle Hub
+
+- 🌉 **[bridge-cpamc-oficial](https://github.com/WiloxDev/bridge-cpamc-oficial)** — Puente e instalador oficial multiplataforma de CPAMC.
+- ⚡ **[cpamc-auto-switcher-pro](https://github.com/WiloxDev/cpamc-auto-switcher-pro)** — Balanceador de carga y rotación multi-cuenta anti-429.
+- 👁️ **[gentle-context-lens](https://github.com/WiloxDev/gentle-context-lens)** — Cabina de contexto, semáforo de tokens y poda quirúrgica.
+- 🤖 **[gentle-claude-bridge](https://github.com/WiloxDev/gentle-claude-bridge)** — Conexión directa a Claude Code Pro/Max sin API keys por token.
+- 🚀 **[gentle-antigravity-bridge](https://github.com/WiloxDev/gentle-antigravity-bridge)** — Puente Google Antigravity para Gentle Shell y Pi.
+
+---
+
+## 📄 Licencia
+
+Apache 2.0 License © WiloxDev Contributors.
