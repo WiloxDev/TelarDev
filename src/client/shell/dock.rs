@@ -1030,7 +1030,34 @@ pub(super) fn render_right_dock(
 
     let collapse_x = area.right().saturating_sub(4);
     let has_collapse_btn = collapse_x > content_x + 11 && area.width >= 16;
-    let tab_right_limit = if has_collapse_btn {
+
+    // Indicador Split View a la izquierda del botón de colapso.
+    // Usamos formato compacto [⊞] cuando el ancho es ajustado (36..47) para evitar solapar pestañas.
+    let (has_split_btn, split_label, split_w) = if area.width >= 48 {
+        let label = match dock_state.layout_mode {
+            DockLayoutMode::SingleTab => "[⊞ Split]",
+            DockLayoutMode::SplitVertical => "[⊟ Single]",
+        };
+        (true, label, 10u16)
+    } else if area.width >= 36 {
+        let label = match dock_state.layout_mode {
+            DockLayoutMode::SingleTab => "[⊞]",
+            DockLayoutMode::SplitVertical => "[⊟]",
+        };
+        (true, label, 3u16)
+    } else {
+        (false, "", 0u16)
+    };
+
+    let split_x = if has_split_btn {
+        collapse_x.saturating_sub(split_w + 1)
+    } else {
+        collapse_x
+    };
+
+    let tab_right_limit = if has_split_btn {
+        split_x
+    } else if has_collapse_btn {
         collapse_x
     } else {
         area.right()
@@ -1045,18 +1072,13 @@ pub(super) fn render_right_dock(
         hits.right_dock_tabs
             .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Status));
     }
-    if content_x + 32 <= tab_right_limit {
+    if content_x + 31 <= tab_right_limit {
         buffer.set_string(content_x + 22, tab_y, " ⎇ Flow ", git_flow_style);
         hits.right_dock_tabs
-            .push((Rect::new(content_x + 22, tab_y, 10, 1), DockTabId::GitFlow));
+            .push((Rect::new(content_x + 22, tab_y, 9, 1), DockTabId::GitFlow));
     }
 
-    // Indicador Split View a la izquierda del botón de colapso
-    if area.width > 36 {
-        let split_label = match dock_state.layout_mode {
-            DockLayoutMode::SingleTab => "[⊞ Split]",
-            DockLayoutMode::SplitVertical => "[⊟ Single]",
-        };
+    if has_split_btn {
         let split_style = if dock_state.layout_mode == DockLayoutMode::SplitVertical {
             Style::default()
                 .fg(config.palette.peach)
@@ -1064,9 +1086,8 @@ pub(super) fn render_right_dock(
         } else {
             Style::default().fg(config.palette.subtext0)
         };
-        let split_x = area.right().saturating_sub(14);
         buffer.set_string(split_x, tab_y, split_label, split_style);
-        hits.right_dock_split_toggle = Rect::new(split_x, tab_y, 10, 1);
+        hits.right_dock_split_toggle = Rect::new(split_x, tab_y, split_w, 1);
     }
 
     // Botón de colapso [»] en el extremo derecho del header (renderizado después para garantizar visibilidad)
