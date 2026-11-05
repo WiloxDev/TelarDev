@@ -30,6 +30,9 @@ pub(crate) struct OverlayRender {
     pub(crate) release_notes_scrollbar: Rect,
     pub(crate) release_notes_scroll_metrics: Option<crate::pane::ScrollMetrics>,
     pub(crate) release_notes_max_scroll: usize,
+    pub(crate) network_project_picker_popup: Rect,
+    pub(crate) network_project_picker_search: Rect,
+    pub(crate) network_project_picker_rows: Vec<(Rect, usize)>,
     pub(crate) cursor: Option<crate::protocol::CursorState>,
 }
 
@@ -1325,9 +1328,9 @@ fn render_network_project_picker_overlay(
     p: &Palette,
 ) -> Option<OverlayRender> {
     let filtered = picker.filtered_indices();
-    let max_available_h = b.area.height.saturating_sub(4);
-    let popup_height = (filtered.len().saturating_add(6) as u16).clamp(16, max_available_h.min(30));
-    let popup_width = (b.area.width.saturating_sub(8)).clamp(74, 96);
+    let max_available_h = b.area.height.saturating_sub(2);
+    let popup_height = (filtered.len().saturating_add(6) as u16).clamp(10, max_available_h.min(30));
+    let popup_width = (b.area.width.saturating_sub(4)).clamp(50, 96);
     let popup = popup(b.area, popup_width, popup_height)?;
     let inner = panel(b, popup, p.accent, p.panel_bg)?;
 
@@ -1395,6 +1398,7 @@ fn render_network_project_picker_overlay(
         inner.width
     };
 
+    let mut row_hits = Vec::new();
     if filtered.is_empty() {
         let empty_msg = if picker.entries.is_empty() {
             " (No se encontraron subcarpetas en la ruta o recurso inaccesible)"
@@ -1421,6 +1425,7 @@ fn render_network_project_picker_overlay(
             let is_selected = (scroll_offset + pos) == picker.selected;
 
             let row_rect = Rect::new(inner.x, row_y, row_content_width, 1);
+            row_hits.push((row_rect, scroll_offset + pos));
             if is_selected {
                 b.set_style(row_rect, Style::default().bg(p.surface0));
             }
@@ -1464,6 +1469,9 @@ fn render_network_project_picker_overlay(
 
     Some(OverlayRender {
         area: popup,
+        network_project_picker_popup: popup,
+        network_project_picker_search: search_rect,
+        network_project_picker_rows: row_hits,
         ..OverlayRender::default()
     })
 }

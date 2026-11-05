@@ -299,6 +299,29 @@ impl ClientShellState {
         ));
     }
 
+    pub(super) fn submit_network_project_picker(&mut self, outcome: &mut ClientShellInput) {
+        let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() else {
+            return;
+        };
+        if let Some(entry) = picker.selected_entry().cloned() {
+            self.push_endpoint_method(
+                crate::api::schema::Method::WorkspaceCreate(
+                    crate::api::schema::WorkspaceCreateParams {
+                        source_workspace_id: self.workspace_action_id(),
+                        cwd: Some(entry.full_path.to_string_lossy().to_string()),
+                        focus: true,
+                        label: Some(entry.name),
+                        env: Default::default(),
+                    },
+                ),
+                outcome,
+            );
+            self.overlay = None;
+            self.mode = ClientShellMode::Terminal;
+            outcome.repaint = true;
+        }
+    }
+
     pub(super) fn move_navigator_selection(&mut self, delta: isize) {
         let Some(ClientShellOverlay::Navigator(navigator)) = self.overlay.as_mut() else {
             return;
@@ -743,24 +766,8 @@ impl ClientShellState {
                     return;
                 }
                 KeyCode::Enter => {
-                    if let Some(entry) = picker.selected_entry().cloned() {
-                        self.push_endpoint_method(
-                            crate::api::schema::Method::WorkspaceCreate(
-                                crate::api::schema::WorkspaceCreateParams {
-                                    source_workspace_id: self.workspace_action_id(),
-                                    cwd: Some(entry.full_path.to_string_lossy().to_string()),
-                                    focus: true,
-                                    label: Some(entry.name),
-                                    env: Default::default(),
-                                },
-                            ),
-                            outcome,
-                        );
-                        self.overlay = None;
-                        self.mode = ClientShellMode::Terminal;
-                        outcome.repaint = true;
-                        return;
-                    }
+                    self.submit_network_project_picker(outcome);
+                    return;
                 }
                 _ => {
                     if let Some(content_changed) = picker.query.handle_key(key) {

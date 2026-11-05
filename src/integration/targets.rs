@@ -90,6 +90,22 @@ pub(crate) fn install_pi() -> io::Result<PathBuf> {
 
     let path = dir.join(PI_EXTENSION_INSTALL_NAME);
     fs::write(&path, PI_EXTENSION_ASSET)?;
+
+    // Sincronización automática de contingencia con Gentle-Shell:
+    // Si existe ~/.gentle-shell/agent/extensions o ~/.gentle-shell, aseguramos que la extensión
+    // esté presente allí también para que gentle-shell cargue la telemetría automáticamente.
+    if let Ok(home) = super::env::home_dir() {
+        let gentle_shell_ext_dir = home.join(".gentle-shell").join("agent").join("extensions");
+        if gentle_shell_ext_dir.is_dir() {
+            let gentle_legacy = gentle_shell_ext_dir.join(PI_EXTENSION_LEGACY_INSTALL_NAME);
+            if gentle_legacy.is_file() {
+                let _ = fs::remove_file(gentle_legacy);
+            }
+            let gentle_target = gentle_shell_ext_dir.join(PI_EXTENSION_INSTALL_NAME);
+            let _ = fs::write(gentle_target, PI_EXTENSION_ASSET);
+        }
+    }
+
     Ok(path)
 }
 

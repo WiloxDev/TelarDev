@@ -1715,6 +1715,41 @@ impl ClientShellState {
             }
             return;
         }
+        if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                        picker.scroll_offset = picker.scroll_offset.saturating_sub(2);
+                        outcome.repaint = true;
+                    }
+                }
+                MouseEventKind::ScrollDown => {
+                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                        picker.scroll_offset = picker.scroll_offset.saturating_add(2);
+                        outcome.repaint = true;
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some((_, index)) = self
+                        .hits
+                        .network_project_picker_rows
+                        .iter()
+                        .find(|(rect, _)| super::contains(*rect, point))
+                        .copied()
+                    {
+                        if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                            picker.selected = index;
+                        }
+                        self.submit_network_project_picker(outcome);
+                    } else if !super::contains(self.hits.network_project_picker_popup, point) {
+                        self.overlay = None;
+                        outcome.repaint = true;
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
         if self.overlay.is_some() {
             if mouse.kind != MouseEventKind::Down(MouseButton::Left) {
                 return;
@@ -1910,22 +1945,6 @@ impl ClientShellState {
                     .min(self.hits.agent_max_scroll);
                 if next != self.agent_scroll {
                     self.agent_scroll = next;
-                    outcome.repaint = true;
-                }
-            }
-            MouseEventKind::ScrollUp
-                if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) =>
-            {
-                if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
-                    picker.scroll_offset = picker.scroll_offset.saturating_sub(2);
-                    outcome.repaint = true;
-                }
-            }
-            MouseEventKind::ScrollDown
-                if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) =>
-            {
-                if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
-                    picker.scroll_offset = picker.scroll_offset.saturating_add(2);
                     outcome.repaint = true;
                 }
             }

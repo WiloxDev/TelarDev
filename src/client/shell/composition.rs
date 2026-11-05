@@ -701,6 +701,9 @@ impl ClientShellState {
                 self.hits.release_notes_scrollbar = rendered.release_notes_scrollbar;
                 self.hits.release_notes_scroll_metrics = rendered.release_notes_scroll_metrics;
                 self.hits.release_notes_max_scroll = rendered.release_notes_max_scroll;
+                self.hits.network_project_picker_popup = rendered.network_project_picker_popup;
+                self.hits.network_project_picker_search = rendered.network_project_picker_search;
+                self.hits.network_project_picker_rows = rendered.network_project_picker_rows;
                 rendered.cursor
             };
             frame.replace_from_ratatui_buffer_preserving_effects(&composed, cursor);

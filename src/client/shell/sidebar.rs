@@ -1059,4 +1059,75 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }
+
+    #[test]
+    fn test_network_project_picker_mouse_click_selects_and_creates_workspace() {
+        use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut state = ClientShellState::new(config);
+        state.set_snapshot(Box::new(crate::client::shell::tests::snapshot()));
+        state.set_pane_surface(crate::client::shell::tests::surface());
+
+        let temp_dir = std::env::temp_dir().join(format!("herdr-test-net-click-{}", std::process::id()));
+        std::fs::create_dir_all(temp_dir.join("sub-one")).unwrap();
+        std::fs::create_dir_all(temp_dir.join("sub-two")).unwrap();
+
+        state.overlay = Some(ClientShellOverlay::NetworkProjectPicker(
+            ClientNetworkProjectPickerOverlay {
+                _root_path: temp_dir.clone(),
+                root_display: temp_dir.to_string_lossy().to_string(),
+                entries: vec![
+                    ClientNetworkProjectEntry {
+                        name: "sub-one".into(),
+                        full_path: temp_dir.join("sub-one"),
+                    },
+                    ClientNetworkProjectEntry {
+                        name: "sub-two".into(),
+                        full_path: temp_dir.join("sub-two"),
+                    },
+                ],
+                selected: 0,
+                scroll_offset: 0,
+                query: text_editor::TextEditor::default(),
+                _search_focused: true,
+            },
+        ));
+
+        state.compose(106, 25).expect("composed frame with overlay");
+        assert_eq!(state.hits.network_project_picker_rows.len(), 2);
+
+        let (row_rect, row_idx) = state.hits.network_project_picker_rows[1];
+        assert_eq!(row_idx, 1);
+
+        let mut outcome = ClientShellInput::default();
+        state.handle_mouse(
+            MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: row_rect.x + 2,
+                row: row_rect.y,
+                modifiers: KeyModifiers::NONE,
+            },
+            &mut outcome,
+        );
+
+        assert!(state.overlay.is_none(), "Clicking a project row must close the overlay");
+
+        let created_action = outcome.actions.iter().any(|action| {
+            if let ClientShellAction::Endpoint { request, .. } = action {
+                if let crate::api::schema::Method::WorkspaceCreate(params) = &request.method {
+                    return params.label.as_deref() == Some("sub-two")
+                        && params.cwd.as_deref()
+                            == Some(temp_dir.join("sub-two").to_string_lossy().as_ref());
+                }
+            }
+            false
+        });
+        assert!(
+            created_action,
+            "Mouse click must dispatch WorkspaceCreate for clicked network project"
+        );
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
 }

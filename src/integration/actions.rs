@@ -22,6 +22,34 @@ pub(crate) fn install_target(
     result
 }
 
+/// Auto-repara silenciosamente cualquier integración soportada que esté presente en la máquina
+/// pero cuya extensión/hook falte o esté desactualizada.
+pub(crate) fn auto_heal_integrations() {
+    let recommendations = super::registry::integration_recommendations();
+    for rec in recommendations {
+        if rec.available && rec.state != super::IntegrationStatusKind::Current {
+            match install_target(rec.target) {
+                Ok(msgs) => {
+                    tracing::info!(
+                        target: "telar::integration",
+                        integration = %rec.label,
+                        messages = ?msgs,
+                        "auto-healed integration"
+                    );
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        target: "telar::integration",
+                        integration = %rec.label,
+                        error = %err,
+                        "failed to auto-heal integration"
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// Experimental Letta install that bypasses the frozen client endpoint
 /// `IntegrationTarget` enum. Fold into the agent registry when it lands.
 pub(crate) fn install_experimental_letta() -> io::Result<Vec<String>> {
