@@ -875,10 +875,34 @@ impl RightDockState {
                 self.files_tab.toggle_selected_expanded();
             } else if let Some(root) = &self.files_tab.cached_root {
                 let file_path = root.join(&entry.relative_path);
-                let lines = if let Ok(content) = std::fs::read_to_string(&file_path) {
-                    content.lines().take(100).map(String::from).collect()
-                } else {
-                    vec!["[Error: No se pudo leer el archivo binario o inaccesible]".into()]
+                // Lectura acotada con tope de tamaño (máx 128 KB y 100 líneas) para evitar freeze
+                let lines = match std::fs::File::open(&file_path) {
+                    Ok(file) => {
+                        use std::io::{BufRead, BufReader, Read};
+                        let mut reader = BufReader::new(file.take(128 * 1024));
+                        let mut collected = Vec::new();
+                        let mut line_buf = String::new();
+                        while collected.len() < 100 {
+                            line_buf.clear();
+                            match reader.read_line(&mut line_buf) {
+                                Ok(0) => break, // EOF o reached 128KB
+                                Ok(_) => {
+                                    let trimmed = line_buf.trim_end_matches(['\r', '\n']);
+                                    collected.push(trimmed.to_string());
+                                }
+                                Err(_) => {
+                                    if collected.is_empty() {
+                                        collected.push("[Error: Archivo binario o codificación no soportada]".into());
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        collected
+                    }
+                    Err(_) => {
+                        vec!["[Error: No se pudo leer el archivo o es inaccesible]".into()]
+                    }
                 };
                 self.quick_peek = Some(QuickPeekState::new(entry.name, lines));
             }
@@ -955,8 +979,13 @@ pub(super) fn render_right_dock(
             }
 
             if area.height > 0 {
+                buffer.set_string(icon_x, area.y, "«", Style::default().fg(config.palette.subtext0));
+                hits.right_dock_header_toggle = Rect::new(icon_x, area.y, 1, 1);
+            }
+
+            if area.height > 1 {
                 let toggle_y = area.bottom().saturating_sub(1);
-                buffer.set_string(icon_x, toggle_y, "«", Style::default().fg(config.palette.overlay0));
+                buffer.set_string(icon_x, toggle_y, "«", Style::default().fg(config.palette.subtext0));
                 hits.right_dock_toggle = Rect::new(icon_x, toggle_y, 1, 1);
             }
         }
@@ -999,22 +1028,30 @@ pub(super) fn render_right_dock(
         inactive_style
     };
 
+    let collapse_x = area.right().saturating_sub(4);
+    let has_collapse_btn = collapse_x > content_x + 11 && area.width >= 16;
+    let tab_right_limit = if has_collapse_btn {
+        collapse_x
+    } else {
+        area.right()
+    };
+
     buffer.set_string(content_x, tab_y, " ⚡ Status ", status_style);
     hits.right_dock_tabs
         .push((Rect::new(content_x, tab_y, 11, 1), DockTabId::Status));
 
-    if content_x + 11 < area.right() {
+    if content_x + 22 <= tab_right_limit {
         buffer.set_string(content_x + 11, tab_y, " 📁 Files ", files_style);
         hits.right_dock_tabs
             .push((Rect::new(content_x + 11, tab_y, 11, 1), DockTabId::Files));
     }
-    if content_x + 22 < area.right() {
+    if content_x + 32 <= tab_right_limit {
         buffer.set_string(content_x + 22, tab_y, " ⎇ Flow ", git_flow_style);
         hits.right_dock_tabs
             .push((Rect::new(content_x + 22, tab_y, 10, 1), DockTabId::GitFlow));
     }
 
-    // Indicador Split View en el extremo derecho del header (Punto 5)
+    // Indicador Split View a la izquierda del botón de colapso
     if area.width > 36 {
         let split_label = match dock_state.layout_mode {
             DockLayoutMode::SingleTab => "[⊞ Split]",
@@ -1027,9 +1064,20 @@ pub(super) fn render_right_dock(
         } else {
             Style::default().fg(config.palette.subtext0)
         };
-        let split_x = area.right().saturating_sub(10);
+        let split_x = area.right().saturating_sub(14);
         buffer.set_string(split_x, tab_y, split_label, split_style);
         hits.right_dock_split_toggle = Rect::new(split_x, tab_y, 10, 1);
+    }
+
+    // Botón de colapso [»] en el extremo derecho del header (renderizado después para garantizar visibilidad)
+    if has_collapse_btn {
+        buffer.set_string(
+            collapse_x,
+            tab_y,
+            "[»]",
+            Style::default().fg(config.palette.subtext0),
+        );
+        hits.right_dock_header_toggle = Rect::new(collapse_x, tab_y, 3, 1);
     }
 
     // Línea separadora horizontal del header
@@ -1147,7 +1195,7 @@ pub(super) fn render_right_dock(
     let toggle_x = area.right().saturating_sub(2);
     let toggle_y = area.bottom().saturating_sub(1);
     if area.width > 1 && area.height > 0 {
-        buffer.set_string(toggle_x, toggle_y, "»", Style::default().fg(config.palette.overlay0));
+        buffer.set_string(toggle_x, toggle_y, "»", Style::default().fg(config.palette.subtext0));
         hits.right_dock_toggle = Rect::new(toggle_x, toggle_y, 1, 1);
     }
 
@@ -3311,6 +3359,8 @@ mod tests {
 
         assert_eq!(rail_hits.right_dock_toggle, Rect::new(98, 19, 1, 1));
         assert_eq!(rail_buffer[(98, 19)].symbol(), "«");
+        assert_eq!(rail_hits.right_dock_header_toggle, Rect::new(98, 0, 1, 1));
+        assert_eq!(rail_buffer[(98, 0)].symbol(), "«");
 
         // 2. Modo Expandido (ancho 30)
         let expanded_area = Rect::new(70, 0, 30, 20);
@@ -3328,5 +3378,9 @@ mod tests {
 
         assert_eq!(expanded_hits.right_dock_toggle, Rect::new(98, 19, 1, 1));
         assert_eq!(expanded_buffer[(98, 19)].symbol(), "»");
+        assert_eq!(expanded_hits.right_dock_header_toggle, Rect::new(96, 0, 3, 1));
+        assert_eq!(expanded_buffer[(96, 0)].symbol(), "[");
+        assert_eq!(expanded_buffer[(97, 0)].symbol(), "»");
+        assert_eq!(expanded_buffer[(98, 0)].symbol(), "]");
     }
 }

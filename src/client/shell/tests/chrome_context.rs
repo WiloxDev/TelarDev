@@ -582,3 +582,47 @@ fn right_dock_bottom_toggle_collapses_and_expands_via_mouse() {
     assert_eq!(buf[(reexpanded_toggle.x, reexpanded_toggle.y)].symbol(), "»");
 }
 
+#[test]
+fn right_dock_header_toggle_collapses_and_expands_via_mouse() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.right_dock_collapsed = false;
+
+    // 1. Componer con el dock expandido
+    state.compose(120, 30).expect("expanded frame");
+    assert!(!state.right_dock_collapsed);
+    let header_toggle = state.hits.right_dock_header_toggle;
+    assert!(header_toggle.width > 0 && header_toggle.height > 0);
+
+    // Clic en el toggle superior [»] para colapsar
+    let outcome =
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: header_toggle.x,
+            row: header_toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+    assert!(outcome.repaint);
+    assert!(outcome.resize);
+    assert!(state.right_dock_collapsed);
+
+    // 2. Componer con dock en rail
+    state.set_pane_surface(surface());
+    state.compose(120, 30).expect("collapsed frame");
+    let rail_header_toggle = state.hits.right_dock_header_toggle;
+    assert!(rail_header_toggle.width > 0 && rail_header_toggle.height > 0);
+
+    // Clic en el toggle superior del rail « para expandir
+    let outcome =
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rail_header_toggle.x,
+            row: rail_header_toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+    assert!(outcome.repaint);
+    assert!(outcome.resize);
+    assert!(!state.right_dock_collapsed);
+}
+

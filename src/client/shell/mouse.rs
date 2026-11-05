@@ -2000,15 +2000,21 @@ impl ClientShellState {
                 self.workspace_press = None;
                 self.tab_press = None;
                 self.chrome_drag = None;
-                if let Some(tab_id) = self.hits.right_dock_tabs.iter().find_map(|(rect, id)| {
-                    super::contains(*rect, point).then_some(*id)
-                }) {
-                    self.select_dock_tab_mouse(tab_id, outcome);
+                if super::contains(self.hits.right_dock_toggle, point)
+                    || super::contains(self.hits.right_dock_header_toggle, point)
+                {
+                    self.toggle_right_dock(outcome);
                     return;
                 }
                 if super::contains(self.hits.right_dock_split_toggle, point) {
                     self.right_dock_state.layout_mode = self.right_dock_state.layout_mode.toggle();
                     outcome.repaint = true;
+                    return;
+                }
+                if let Some(tab_id) = self.hits.right_dock_tabs.iter().find_map(|(rect, id)| {
+                    super::contains(*rect, point).then_some(*id)
+                }) {
+                    self.select_dock_tab_mouse(tab_id, outcome);
                     return;
                 }
                 if let Some(sec_id) = self.hits.right_dock_section_toggles.iter().find_map(|(rect, id)| {
@@ -2041,10 +2047,6 @@ impl ClientShellState {
                         }
                     }
                     outcome.repaint = true;
-                    return;
-                }
-                if super::contains(self.hits.right_dock_toggle, point) {
-                    self.toggle_right_dock(outcome);
                     return;
                 }
                 if super::contains(self.hits.right_dock_area, point) {

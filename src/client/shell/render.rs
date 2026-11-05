@@ -370,37 +370,43 @@ pub(super) fn render_shell(
                     }
                 });
 
-            // Detectar hermanos del mismo repositorio (worktrees vinculados o workspaces que comparten git root)
-            let current_git_dir = super::telemetry::resolve_git_dir(std::path::Path::new(root_str));
+            // Solo resolver hermanos de git si el dock no está en modo compacto (rail <= 3)
+            // y si la pestaña activa necesita contexto de Git Flow o archivos.
+            let needs_git_siblings = layout.right_dock.width > 3
+                && state.right_dock_state.active_tab == super::dock::DockTabId::GitFlow;
+
             let mut siblings = Vec::new();
 
-            if let Some(ref my_git) = current_git_dir {
-                for other_ws in &snapshot.workspaces {
-                    if other_ws.workspace_id == ws.workspace_id {
-                        continue;
-                    }
-                    let other_root = std::path::Path::new(&other_ws.new_workspace_cwd);
-                    if let Some(other_git) = super::telemetry::resolve_git_dir(other_root) {
-                        // Si comparten el mismo admin de git o apuntan a worktrees del mismo repositorio
-                        let same_repo = my_git == &other_git
-                            || my_git.starts_with(&other_git)
-                            || other_git.starts_with(my_git)
-                            || (my_git.to_string_lossy().contains("/worktrees/") && other_git.to_string_lossy().contains("/worktrees/"));
+            if needs_git_siblings {
+                let current_git_dir = super::telemetry::resolve_git_dir(std::path::Path::new(root_str));
+                if let Some(ref my_git) = current_git_dir {
+                    for other_ws in &snapshot.workspaces {
+                        if other_ws.workspace_id == ws.workspace_id {
+                            continue;
+                        }
+                        let other_root = std::path::Path::new(&other_ws.new_workspace_cwd);
+                        if let Some(other_git) = super::telemetry::resolve_git_dir(other_root) {
+                            // Si comparten el mismo admin de git o apuntan a worktrees del mismo repositorio
+                            let same_repo = my_git == &other_git
+                                || my_git.starts_with(&other_git)
+                                || other_git.starts_with(my_git)
+                                || (my_git.to_string_lossy().contains("/worktrees/") && other_git.to_string_lossy().contains("/worktrees/"));
 
-                        if same_repo {
-                            let sib_agent = snapshot.panes.iter()
-                                .find(|p| p.workspace_id == other_ws.workspace_id && p.focused)
-                                .and_then(|p| snapshot.agents.iter().find(|a| a.pane_id == p.pane_id && a.workspace_id == other_ws.workspace_id))
-                                .or_else(|| snapshot.agents.iter().find(|a| a.workspace_id == other_ws.workspace_id));
+                            if same_repo {
+                                let sib_agent = snapshot.panes.iter()
+                                    .find(|p| p.workspace_id == other_ws.workspace_id && p.focused)
+                                    .and_then(|p| snapshot.agents.iter().find(|a| a.pane_id == p.pane_id && a.workspace_id == other_ws.workspace_id))
+                                    .or_else(|| snapshot.agents.iter().find(|a| a.workspace_id == other_ws.workspace_id));
 
-                            siblings.push(super::dock::SiblingWorkspaceContext {
-                                workspace_id: &other_ws.workspace_id,
-                                workspace_name: &other_ws.label,
-                                root_path: other_root,
-                                branch: other_ws.branch.as_deref(),
-                                agent_status: sib_agent.map(|a| a.agent_status),
-                                agent_name: sib_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
-                            });
+                                siblings.push(super::dock::SiblingWorkspaceContext {
+                                    workspace_id: &other_ws.workspace_id,
+                                    workspace_name: &other_ws.label,
+                                    root_path: other_root,
+                                    branch: other_ws.branch.as_deref(),
+                                    agent_status: sib_agent.map(|a| a.agent_status),
+                                    agent_name: sib_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
+                                });
+                            }
                         }
                     }
                 }
@@ -435,6 +441,7 @@ pub(super) fn render_shell(
         hits.right_dock_split_toggle = Rect::default();
         hits.right_dock_file_rows.clear();
         hits.right_dock_section_toggles.clear();
+        hits.right_dock_header_toggle = Rect::default();
         hits.right_dock_toggle = Rect::default();
         hits.sidebar_divider = Rect::default();
         hits.sidebar_section_divider = Rect::default();
