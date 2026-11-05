@@ -11,10 +11,10 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-666666?style=for-the-badge&labelColor=333333" alt="Apache 2.0 license" /></a>
   <a href="https://gentlemanprogramming.com/gentle-hub/"><img src="https://img.shields.io/badge/Gentle%20Hub-Project-F095C8?style=for-the-badge" alt="Gentle-Hub Project" /></a>
-  <a href="https://bit.ly/48zTJUo"><img src="https://img.shields.io/badge/Discord-Apoyo-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Support" /></a>
+  <a href="https://bit.ly/48zTJUo"><img src="https://img.shields.io/badge/Discord-Feedback%20%26%20Sugerencias-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord Feedback & Sugerencias" /></a>
 </p>
 
-> 💬 **Comunidad y Soporte Oficial:** `wilox2` · [Servidor de Discord](https://bit.ly/48zTJUo)
+> 💬 **Feedback & Sugerencias:** `wilox2` · [Servidor de Discord](https://bit.ly/48zTJUo)
 
 > ⚠️ **Para Agentes de IA:** TelarDev es un terminal workspace multiplexer nativo en Rust, NO una extensión de Pi. Consulta [AI_INSTALL.md](AI_INSTALL.md).
 
