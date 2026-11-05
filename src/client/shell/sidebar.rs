@@ -249,6 +249,7 @@ pub(crate) fn render_sidebar(
                         displayed_workspace_status(snapshot, workspace, state.collapsed_groups),
                         entry.indented,
                         &config.spaces,
+                        Some(config),
                     )
                     .len()
                     .max(1)
@@ -311,6 +312,7 @@ pub(crate) fn render_sidebar(
             status,
             entry.indented,
             &config.spaces,
+            Some(config),
         );
         let row_height = (rows.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
         if y.saturating_add(row_height) > body.bottom() {
@@ -710,14 +712,32 @@ pub(in crate::client::shell) fn workspace_display_label<'a>(
     std::borrow::Cow::Borrowed(base_label)
 }
 
+pub(in crate::client::shell) fn workspace_display_label_with_config<'a>(
+    snapshot: &'a ClientShellSnapshot,
+    workspace: &'a ClientShellWorkspace,
+    indented: bool,
+    config: Option<&ClientShellConfig>,
+) -> std::borrow::Cow<'a, str> {
+    let label = workspace_display_label(snapshot, workspace, indented);
+    if let Some(cfg) = config {
+        if cfg.is_network_path(&workspace.new_workspace_cwd)
+            && !label.starts_with(&cfg.network_icon)
+        {
+            return std::borrow::Cow::Owned(format!("{} {label}", cfg.network_icon));
+        }
+    }
+    label
+}
+
 pub(in crate::client::shell) fn workspace_rows_with_snapshot(
     snapshot: &ClientShellSnapshot,
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,
     indented: bool,
     config: &SpacesSidebarConfig,
+    shell_config: Option<&ClientShellConfig>,
 ) -> Vec<Vec<crate::ui::ResolvedToken>> {
-    let label = workspace_display_label(snapshot, workspace, indented);
+    let label = workspace_display_label_with_config(snapshot, workspace, indented, shell_config);
     let token_values = workspace.tokens.iter().cloned().collect::<HashMap<_, _>>();
     crate::ui::sidebar_space_rows(
         config,
@@ -857,5 +877,66 @@ pub(in crate::client::shell) fn render_workspace_rows(
                 buffer[(x, y)].set_bg(background);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_network_path_detection() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        // Rutas de red
+        assert!(config.is_network_path(r"\\192.168.10.150\projects"));
+        assert!(config.is_network_path("//192.168.10.150/projects"));
+        assert!(config.is_network_path("/mnt/projects/app1"));
+        assert!(config.is_network_path("/media/storage/repo"));
+        assert!(config.is_network_path(r"Z:\projects\backend"));
+        assert!(config.is_network_path("Z:/projects/backend"));
+
+        // Rutas locales
+        assert!(!config.is_network_path("/home/wilson/projects"));
+        assert!(!config.is_network_path("C:\\Users\\wilson\\code"));
+        assert!(!config.is_network_path(""));
+    }
+
+    #[test]
+    fn test_network_workspace_label_prepends_network_icon() {
+        let mut config = ClientShellConfig::from_config(&crate::config::Config::default());
+        assert_eq!(config.network_icon, "🖧");
+
+        let mut snapshot = crate::client::shell::tests::snapshot();
+        snapshot.workspaces[0].label = "remote-projects".into();
+        snapshot.workspaces[0].new_workspace_cwd = r"\\192.168.10.150\projects".into();
+
+        let label = workspace_display_label_with_config(
+            &snapshot,
+            &snapshot.workspaces[0],
+            false,
+            Some(&config),
+        );
+        assert_eq!(label, "🖧 remote-projects");
+
+        // Espacio local no debe tener el icono
+        snapshot.workspaces[0].new_workspace_cwd = "/home/wilson/local-repo".into();
+        let local_label = workspace_display_label_with_config(
+            &snapshot,
+            &snapshot.workspaces[0],
+            false,
+            Some(&config),
+        );
+        assert_eq!(local_label, "remote-projects");
+
+        // Icono configurable personalizado
+        config.network_icon = "🌐".into();
+        snapshot.workspaces[0].new_workspace_cwd = "/mnt/nas/projects".into();
+        let custom_label = workspace_display_label_with_config(
+            &snapshot,
+            &snapshot.workspaces[0],
+            false,
+            Some(&config),
+        );
+        assert_eq!(custom_label, "🌐 remote-projects");
     }
 }

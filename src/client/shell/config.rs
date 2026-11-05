@@ -140,6 +140,8 @@ impl ClientShellConfig {
             agents: config.ui.sidebar.agents.clone(),
             agent_panel_sort: config.ui.agent_panel_sort,
             status_indicators: config.ui.status_indicators,
+            network_icon: config.ui.network_icon.clone(),
+            network_shares: config.ui.network_shares.clone(),
             sound_enabled: config.ui.sound.enabled,
             toast_delivery: config.ui.toast.delivery,
             toast_delay_seconds: config.ui.toast.delay_seconds,
@@ -382,6 +384,8 @@ impl ClientShellConfig {
                 self.agents = ui.sidebar.agents.clone();
                 self.agent_panel_sort = ui.agent_panel_sort;
                 self.status_indicators = ui.status_indicators;
+                self.network_icon = ui.network_icon.clone();
+                self.network_shares = ui.network_shares.clone();
                 self.sound_enabled = ui.sound.enabled;
                 self.toast_delivery = ui.toast.delivery;
                 self.toast_delay_seconds = ui.toast.delay_seconds;
@@ -411,6 +415,17 @@ impl ClientShellConfig {
         }
 
         diagnostics
+    }
+
+    pub(crate) fn is_network_path(&self, path: &str) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+        let normalized = path.replace('/', "\\");
+        self.network_shares.iter().any(|pattern| {
+            let pat_norm = pattern.replace('/', "\\");
+            normalized.starts_with(&pat_norm) || path.starts_with(pattern)
+        })
     }
 
     pub(super) fn layout(

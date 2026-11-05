@@ -1077,6 +1077,10 @@ pub struct UiConfig {
     _legacy_agent_panel_scope: Option<LegacyAgentPanelScopeConfig>,
     /// Agent status indicator style. Saved values are "dots" or "symbols". Default: "dots".
     pub status_indicators: StatusIndicatorStyle,
+    /// Icon displayed for remote/network workspaces. Default: "🖧".
+    pub network_icon: String,
+    /// Path prefixes classified as remote or network shares.
+    pub network_shares: Vec<String>,
     /// Expanded sidebar row composition.
     pub sidebar: SidebarConfig,
     /// Accent color for highlights, borders, and navigation UI.
@@ -1326,6 +1330,16 @@ impl Default for UiConfig {
             agent_panel_sort: AgentPanelSortConfig::Spaces,
             _legacy_agent_panel_scope: None,
             status_indicators: StatusIndicatorStyle::Dots,
+            network_icon: "🖧".into(),
+            network_shares: vec![
+                "\\\\".into(),
+                "//".into(),
+                "/mnt/".into(),
+                "/media/".into(),
+                "Z:".into(),
+                "Y:".into(),
+                "X:".into(),
+            ],
             sidebar: SidebarConfig::default(),
             accent: "cyan".into(),
             toast: ToastConfig::default(),

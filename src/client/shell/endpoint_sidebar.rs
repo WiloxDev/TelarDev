@@ -325,6 +325,7 @@ pub(super) fn render_expanded(
                                 ),
                                 entry.indented,
                                 &config.spaces,
+                                Some(config),
                             )
                             .len()
                             .max(1)
@@ -454,6 +455,7 @@ pub(super) fn render_expanded(
                     status,
                     entry.indented,
                     &config.spaces,
+                    Some(config),
                 );
                 let height = (tokens.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
                 if y.saturating_add(height) > body.bottom() {
