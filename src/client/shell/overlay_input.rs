@@ -214,48 +214,80 @@ impl ClientShellState {
     }
 
     pub(super) fn open_network_project_picker(&mut self) {
+        // Prioridad definitiva:
+        // 1. Si existe una ruta raíz de proyectos de red estándar (/mnt/z, /mnt/projects, recurso UNC),
+        //    y tiene subdirectorios, usarla directamente como fuente de proyectos.
+        // 2. Si el espacio enfocado o algún espacio existente está dentro de un recurso de red,
+        //    obtener su directorio raíz/padre que contenga múltiples subproyectos.
         let mut candidate_root = None;
 
-        if let Some(snapshot) = self.snapshot.as_deref() {
-            if let Some(focused_ws) = snapshot.focused_workspace_id.as_deref().and_then(|id| {
-                snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
-            }) {
-                if self.config.is_network_path(&focused_ws.new_workspace_cwd) {
-                    let path = std::path::PathBuf::from(&focused_ws.new_workspace_cwd);
-                    if path.is_dir() {
-                        candidate_root = Some(path);
-                    }
+        for primary_root in [
+            "/mnt/z",
+            "/mnt/projects",
+            "//192.168.10.150/projects",
+            r"\\192.168.10.150\projects",
+            "Z:\\",
+            "/mnt/share",
+        ] {
+            let p = std::path::PathBuf::from(primary_root);
+            if p.is_dir() {
+                // Verificar si contiene subdirectorios reales
+                let has_subdirs = std::fs::read_dir(&p).map(|mut read| {
+                    read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
+                }).unwrap_or(false);
+                if has_subdirs {
+                    candidate_root = Some(p);
+                    break;
                 }
             }
         }
 
+        // Si no se encontró un recurso primario directo, verificar espacios existentes
         if candidate_root.is_none() {
-            if let Some(snapshot) = self.snapshot.as_deref() {
-                for ws in &snapshot.workspaces {
-                    if self.config.is_network_path(&ws.new_workspace_cwd) {
-                        let path = std::path::PathBuf::from(&ws.new_workspace_cwd);
-                        if path.is_dir() {
-                            candidate_root = Some(path);
-                            break;
+            let inspect_ws = |ws_cwd: &str| -> Option<std::path::PathBuf> {
+                let p = std::path::PathBuf::from(ws_cwd);
+                if !p.is_dir() {
+                    return None;
+                }
+                // Si el cwd actual tiene subcarpetas, podría ser la raíz
+                let has_subdirs = std::fs::read_dir(&p).map(|mut read| {
+                    read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
+                }).unwrap_or(false);
+                if has_subdirs {
+                    return Some(p);
+                }
+                // Si es un subproyecto (ej: /mnt/z/wilox-pi), su padre (/mnt/z) es la raíz de proyectos
+                if let Some(parent) = p.parent() {
+                    if parent.is_dir() {
+                        let parent_has_subdirs = std::fs::read_dir(parent).map(|mut read| {
+                            read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
+                        }).unwrap_or(false);
+                        if parent_has_subdirs {
+                            return Some(parent.to_path_buf());
                         }
                     }
                 }
-            }
-        }
+                None
+            };
 
-        if candidate_root.is_none() {
-            for fallback in [
-                "/mnt/z",
-                "/mnt/projects",
-                "//192.168.10.150/projects",
-                r"\\192.168.10.150\projects",
-                "Z:\\",
-                "/mnt/share",
-            ] {
-                let p = std::path::PathBuf::from(fallback);
-                if p.is_dir() {
-                    candidate_root = Some(p);
-                    break;
+            if let Some(snapshot) = self.snapshot.as_deref() {
+                if let Some(focused_ws) = snapshot.focused_workspace_id.as_deref().and_then(|id| {
+                    snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
+                }) {
+                    if self.config.is_network_path(&focused_ws.new_workspace_cwd) {
+                        candidate_root = inspect_ws(&focused_ws.new_workspace_cwd);
+                    }
+                }
+
+                if candidate_root.is_none() {
+                    for ws in &snapshot.workspaces {
+                        if self.config.is_network_path(&ws.new_workspace_cwd) {
+                            if let Some(root) = inspect_ws(&ws.new_workspace_cwd) {
+                                candidate_root = Some(root);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
