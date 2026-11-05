@@ -20,14 +20,7 @@ impl ClientShellState {
                 self.persist_chrome_preferences(outcome);
             }
             crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleRightDock) => {
-                self.right_dock_collapsed = !self.right_dock_collapsed;
-                self.right_dock_collapsed_manual = true;
-                if self.right_dock_collapsed && self.mode == ClientShellMode::RightDock {
-                    self.mode = ClientShellMode::Terminal;
-                }
-                self.invalidate_pane_surface();
-                outcome.repaint = true;
-                outcome.resize = true;
+                self.toggle_right_dock(outcome);
             }
             crate::input::KeybindMatch::Action(crate::input::KeybindAction::JumpDockStatus) => {
                 self.jump_to_dock_tab(super::dock::DockTabId::Status, outcome);
@@ -1134,6 +1127,17 @@ impl ClientShellState {
             })),
             _ => None,
         }
+    }
+
+    pub(super) fn toggle_right_dock(&mut self, outcome: &mut ClientShellInput) {
+        self.right_dock_collapsed = !self.right_dock_collapsed;
+        self.right_dock_collapsed_manual = true;
+        if self.right_dock_collapsed && self.mode == ClientShellMode::RightDock {
+            self.mode = ClientShellMode::Terminal;
+        }
+        self.invalidate_pane_surface();
+        outcome.repaint = true;
+        outcome.resize = true;
     }
 
     pub(super) fn select_dock_tab_mouse(

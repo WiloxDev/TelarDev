@@ -2043,6 +2043,10 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
+                if super::contains(self.hits.right_dock_toggle, point) {
+                    self.toggle_right_dock(outcome);
+                    return;
+                }
                 if super::contains(self.hits.right_dock_area, point) {
                     outcome.repaint = true;
                     return;

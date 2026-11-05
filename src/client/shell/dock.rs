@@ -953,6 +953,12 @@ pub(super) fn render_right_dock(
                 hits.right_dock_tabs
                     .push((Rect::new(icon_x, area.y + 5, 2, 1), DockTabId::GitFlow));
             }
+
+            if area.height > 0 {
+                let toggle_y = area.bottom().saturating_sub(1);
+                buffer.set_string(icon_x, toggle_y, "«", Style::default().fg(config.palette.overlay0));
+                hits.right_dock_toggle = Rect::new(icon_x, toggle_y, 1, 1);
+            }
         }
         return;
     }
@@ -1039,7 +1045,7 @@ pub(super) fn render_right_dock(
 
     // Renderizado según layout_mode (Punto 5: Split View opcional)
     let body_y = header_divider_y + 1;
-    let available_rows = area.bottom().saturating_sub(body_y);
+    let available_rows = area.bottom().saturating_sub(body_y).saturating_sub(1);
 
     if dock_state.layout_mode == DockLayoutMode::SplitVertical && available_rows >= 14 {
         let half_rows = available_rows / 2;
@@ -1067,7 +1073,7 @@ pub(super) fn render_right_dock(
             }
         }
         let lower_body_y = split_divider_y + 1;
-        let lower_rows = area.bottom().saturating_sub(lower_body_y);
+        let lower_rows = area.bottom().saturating_sub(lower_body_y).saturating_sub(1);
         if let Some(ctx) = context {
             dock_state.files_tab.refresh_if_needed(ctx.root_path);
         }
@@ -1136,6 +1142,13 @@ pub(super) fn render_right_dock(
                 );
             }
         }
+    }
+
+    let toggle_x = area.right().saturating_sub(2);
+    let toggle_y = area.bottom().saturating_sub(1);
+    if area.width > 1 && area.height > 0 {
+        buffer.set_string(toggle_x, toggle_y, "»", Style::default().fg(config.palette.overlay0));
+        hits.right_dock_toggle = Rect::new(toggle_x, toggle_y, 1, 1);
     }
 
     // Si hay un Quick Peek activo, renderizar el modal flotante (Punto 6)
@@ -3275,5 +3288,45 @@ mod tests {
 
         assert_eq!(status.telemetry.git.agent_files_changed, 3);
         assert_eq!(status.telemetry.git.agent_lines_added, 48);
+    }
+
+    #[test]
+    fn test_render_right_dock_toggle_in_rail_and_expanded_modes() {
+        let config = ClientShellConfig::from_config(&crate::config::Config::default());
+        let mut dock = RightDockState::default();
+
+        // 1. Modo Rail (ancho 3)
+        let rail_area = Rect::new(97, 0, 3, 20);
+        let mut rail_buffer = Buffer::empty(rail_area);
+        let mut rail_hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_right_dock(
+            &mut rail_buffer,
+            rail_area,
+            &config,
+            &mut dock,
+            None,
+            &mut rail_hits,
+        );
+
+        assert_eq!(rail_hits.right_dock_toggle, Rect::new(98, 19, 1, 1));
+        assert_eq!(rail_buffer[(98, 19)].symbol(), "«");
+
+        // 2. Modo Expandido (ancho 30)
+        let expanded_area = Rect::new(70, 0, 30, 20);
+        let mut expanded_buffer = Buffer::empty(expanded_area);
+        let mut expanded_hits = crate::client::shell::state::ShellHitMap::default();
+
+        render_right_dock(
+            &mut expanded_buffer,
+            expanded_area,
+            &config,
+            &mut dock,
+            None,
+            &mut expanded_hits,
+        );
+
+        assert_eq!(expanded_hits.right_dock_toggle, Rect::new(98, 19, 1, 1));
+        assert_eq!(expanded_buffer[(98, 19)].symbol(), "»");
     }
 }

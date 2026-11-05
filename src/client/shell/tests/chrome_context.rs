@@ -529,3 +529,56 @@ fn close_confirmation_error_becomes_client_owned_overlay_and_stable_workspace_cl
             if params.workspace_id == "ws_1" && !params.close_group
     ));
 }
+
+#[test]
+fn right_dock_bottom_toggle_collapses_and_expands_via_mouse() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.right_dock_collapsed = false;
+
+    // 1. Componer con el dock expandido
+    state.compose(120, 30).expect("expanded frame");
+    assert!(!state.right_dock_collapsed);
+    let toggle = state.hits.right_dock_toggle;
+    assert!(toggle.width > 0 && toggle.height > 0);
+
+    // Clic en el toggle inferior para colapsar
+    let outcome =
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: toggle.x,
+            row: toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+    assert!(outcome.repaint);
+    assert!(outcome.resize);
+    assert!(state.right_dock_collapsed);
+
+    // 2. Simular recepción de nueva superficie tras resize y componer con dock en rail
+    state.set_pane_surface(surface());
+    state.compose(120, 30).expect("collapsed frame");
+    let rail_toggle = state.hits.right_dock_toggle;
+    assert!(rail_toggle.width > 0 && rail_toggle.height > 0);
+
+    // Clic en el toggle inferior para expandir
+    let outcome =
+        state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: rail_toggle.x,
+            row: rail_toggle.y,
+            modifiers: KeyModifiers::empty(),
+        })]);
+    assert!(outcome.repaint);
+    assert!(outcome.resize);
+    assert!(!state.right_dock_collapsed);
+
+    // 3. Componer de nuevo expandido y verificar glifo
+    state.set_pane_surface(surface());
+    let reexpanded_frame = state.compose(120, 30).expect("re-expanded frame");
+    let reexpanded_toggle = state.hits.right_dock_toggle;
+    assert_eq!(reexpanded_toggle, toggle);
+    let buf = reexpanded_frame.to_ratatui_buffer().expect("buffer");
+    assert_eq!(buf[(reexpanded_toggle.x, reexpanded_toggle.y)].symbol(), "»");
+}
+
