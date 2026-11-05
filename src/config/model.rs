@@ -1334,7 +1334,9 @@ impl Default for UiConfig {
             network_shares: vec![
                 "\\\\".into(),
                 "//".into(),
-                "/mnt/".into(),
+                "/mnt/z".into(),
+                "/mnt/projects".into(),
+                "/mnt/share".into(),
                 "/media/".into(),
                 "Z:".into(),
                 "Y:".into(),

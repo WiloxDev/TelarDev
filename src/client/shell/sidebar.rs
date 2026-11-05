@@ -911,6 +911,8 @@ mod tests {
         assert!(config.is_network_path("Z:/projects/backend"));
 
         // Rutas locales
+        assert!(!config.is_network_path("/mnt/c/Users/wilson"));
+        assert!(!config.is_network_path("/mnt/windows-c"));
         assert!(!config.is_network_path("/home/wilson/projects"));
         assert!(!config.is_network_path("C:\\Users\\wilson\\code"));
         assert!(!config.is_network_path(""));
@@ -945,7 +947,7 @@ mod tests {
 
         // Icono configurable personalizado
         config.network_icon = "🌐".into();
-        snapshot.workspaces[0].new_workspace_cwd = "/mnt/nas/projects".into();
+        snapshot.workspaces[0].new_workspace_cwd = "/mnt/z/projects".into();
         let custom_label = workspace_display_label_with_config(
             &snapshot,
             &snapshot.workspaces[0],
