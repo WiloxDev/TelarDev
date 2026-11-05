@@ -318,6 +318,7 @@ pub(super) fn agent_row(
         .or(agent.title.as_deref());
     let has_explicit_name = agent.display_agent.is_some() || agent.name.is_some();
     let has_summary_token = agent.tokens.iter().any(|(k, _)| k == "summary");
+
     let model_tag = agent
         .tokens
         .iter()
@@ -335,7 +336,10 @@ pub(super) fn agent_row(
                 .filter(|t| !t.is_empty());
 
             let task = if let Some(title) = raw_title {
-                if title.eq_ignore_ascii_case(base) {
+                if title.eq_ignore_ascii_case(base)
+                    || title.eq_ignore_ascii_case(&workspace.label)
+                    || title.starts_with('π')
+                {
                     None
                 } else {
                     let stripped = title
@@ -355,7 +359,10 @@ pub(super) fn agent_row(
                         })
                         .unwrap_or(title);
 
-                    if stripped.is_empty() || stripped.eq_ignore_ascii_case(base) {
+                    if stripped.is_empty()
+                        || stripped.eq_ignore_ascii_case(base)
+                        || stripped.eq_ignore_ascii_case(&workspace.label)
+                    {
                         None
                     } else {
                         Some(stripped)

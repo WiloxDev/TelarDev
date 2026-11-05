@@ -100,6 +100,9 @@ impl ClientShellState {
             ClientEndpointFocusTarget::Pane(pane_id),
             outcome,
         );
+        self.mode = ClientShellMode::Terminal;
+        self.navigate_workspace_id = None;
+        outcome.repaint = true;
         true
     }
 

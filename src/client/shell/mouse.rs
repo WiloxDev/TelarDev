@@ -2269,12 +2269,15 @@ impl ClientShellState {
                     .find(|(rect, _)| super::contains(*rect, point))
                     .map(|(_, pane_id)| pane_id.clone());
                 if let Some(pane_id) = agent_pane_id {
-                    self.push_endpoint_method(
-                        crate::api::schema::Method::PaneFocus(crate::api::schema::PaneTarget {
-                            pane_id,
-                        }),
+                    let endpoint_id = self.active_endpoint_id.clone();
+                    self.focus_or_activate(
+                        endpoint_id,
+                        ClientEndpointFocusTarget::Pane(pane_id),
                         outcome,
                     );
+                    self.mode = ClientShellMode::Terminal;
+                    self.navigate_workspace_id = None;
+                    outcome.repaint = true;
                     return;
                 }
                 let scrollbar_hit = self
