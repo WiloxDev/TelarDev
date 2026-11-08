@@ -53,7 +53,13 @@ fn match_exact_filename(name: &str) -> Option<FileIcon> {
             glyph: "⚙",
             color: Color::Rgb(109, 128, 134), // Gris frío (#6d8086)
         }),
-        ".env" | ".env.example" | ".env.local" | ".env.development" | ".env.production" => {
+        ".env" | ".env.local" | ".env.development" | ".env.production" => {
+            Some(FileIcon {
+                glyph: "🔒",
+                color: Color::Rgb(243, 139, 168), // Rojo de alerta/seguridad (#f38ba8)
+            })
+        }
+        ".env.example" | ".env.sample" | ".env.template" => {
             Some(FileIcon {
                 glyph: "⚙",
                 color: Color::Rgb(249, 226, 175), // Oro/Amarillo tenue (#f9e2af)
@@ -308,6 +314,13 @@ pub fn resolve_file_icon(name: &str) -> FileIcon {
         return icon;
     }
 
+    if super::telemetry::is_sensitive_file(name) {
+        return FileIcon {
+            glyph: "🔒",
+            color: Color::Rgb(243, 139, 168), // Rojo de alerta/seguridad (#f38ba8)
+        };
+    }
+
     if let Some(dot_pos) = name.rfind('.') {
         if dot_pos + 1 < name.len() {
             let ext = &name[dot_pos + 1..];
@@ -380,5 +393,27 @@ mod tests {
 
         let no_ext = resolve_file_icon("sin_extension");
         assert_eq!(no_ext.glyph, "≡");
+    }
+
+    #[test]
+    fn sensitive_files_resolve_lock_icon() {
+        let env_file = resolve_file_icon(".env");
+        assert_eq!(env_file.glyph, "🔒");
+        assert_eq!(env_file.color, Color::Rgb(243, 139, 168));
+
+        let env_prod = resolve_file_icon(".env.production");
+        assert_eq!(env_prod.glyph, "🔒");
+        assert_eq!(env_prod.color, Color::Rgb(243, 139, 168));
+
+        let env_example = resolve_file_icon(".env.example");
+        assert_eq!(env_example.glyph, "⚙");
+
+        let creds = resolve_file_icon("credentials.json");
+        assert_eq!(creds.glyph, "🔒");
+        assert_eq!(creds.color, Color::Rgb(243, 139, 168));
+
+        let privkey = resolve_file_icon("server.key");
+        assert_eq!(privkey.glyph, "🔒");
+        assert_eq!(privkey.color, Color::Rgb(243, 139, 168));
     }
 }
