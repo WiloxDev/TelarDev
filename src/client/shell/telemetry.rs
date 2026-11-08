@@ -408,6 +408,176 @@ pub fn clean_file_basename(path_str: &str) -> String {
         .unwrap_or_else(|| path_str.to_string())
 }
 
+/// Detecta si una ruta relativa o nombre de archivo corresponde a un secreto,
+/// credencial o clave privada cuyo contenido no debe exponerse en texto plano.
+pub fn is_sensitive_file(path: &str) -> bool {
+    let norm = path.replace('\\', "/");
+    let name = norm.rsplit('/').next().unwrap_or(&norm);
+    let lower_name = name.to_lowercase();
+    let lower_path = norm.to_lowercase();
+
+    // No considerar plantillas o ejemplos públicos como secretos
+    if lower_name.ends_with(".example")
+        || lower_name.ends_with(".sample")
+        || lower_name.ends_with(".template")
+        || lower_name.contains("example")
+    {
+        return false;
+    }
+
+    // 1. Directorios críticos de credenciales
+    if lower_path.contains("/.ssh/")
+        || lower_path.starts_with(".ssh/")
+        || lower_path.contains("/.aws/")
+        || lower_path.starts_with(".aws/")
+        || lower_path.contains("/.kube/")
+        || lower_path.starts_with(".kube/")
+        || lower_path.contains("/.gnupg/")
+        || lower_path.starts_with(".gnupg/")
+        || lower_path.contains("/.vault/")
+        || lower_path.starts_with(".vault/")
+        || lower_path.contains("/.docker/")
+        || lower_path.starts_with(".docker/")
+    {
+        return true;
+    }
+
+    // 2. Archivos .env
+    if lower_name.starts_with(".env") {
+        return true;
+    }
+
+    // 3. Claves privadas y certificados criptográficos
+    let is_key_or_cert = lower_name.ends_with(".pem")
+        || lower_name.ends_with(".key")
+        || lower_name.ends_with(".p12")
+        || lower_name.ends_with(".pfx")
+        || lower_name.ends_with(".keystore")
+        || lower_name.ends_with(".jks")
+        || lower_name.starts_with("id_rsa")
+        || lower_name.starts_with("id_ed25519")
+        || lower_name.starts_with("id_ecdsa")
+        || lower_name.starts_with("id_dsa");
+
+    if is_key_or_cert {
+        return true;
+    }
+
+    // 4. Archivos de autenticación y tokens en claro
+    if lower_name == ".netrc"
+        || lower_name == ".npmrc"
+        || lower_name == "credentials.json"
+        || lower_name == "client_secret.json"
+        || lower_name == "service_account.json"
+    {
+        return true;
+    }
+
+    // 5. Nombres que denotan secretos/credenciales sin ser código fuente normal
+    let is_source_code = lower_name.ends_with(".rs")
+        || lower_name.ends_with(".go")
+        || lower_name.ends_with(".ts")
+        || lower_name.ends_with(".js")
+        || lower_name.ends_with(".py")
+        || lower_name.ends_with(".c")
+        || lower_name.ends_with(".cpp")
+        || lower_name.ends_with(".h")
+        || lower_name.ends_with(".java")
+        || lower_name.ends_with(".html")
+        || lower_name.ends_with(".css");
+
+    if !is_source_code {
+        if lower_name.contains("secret")
+            || lower_name.contains("credential")
+            || lower_name.contains("token")
+            || lower_name.contains("passw")
+            || lower_name.contains("private_key")
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Enmascara valores de credenciales, tokens conocidos y claves privadas
+/// en líneas de texto para prevenir fugas accidentales en la interfaz.
+pub fn sanitize_secret_line(line: &str) -> String {
+    if line.contains("BEGIN ") && line.contains("PRIVATE KEY") {
+        return "[-----REDACTED PRIVATE KEY-----]".to_string();
+    }
+
+    let mut result = line.to_string();
+
+    if let Some(pos) = result.find("Bearer ") {
+        let token_start = pos + 7;
+        if token_start < result.len() {
+            let token_end = result[token_start..]
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',')
+                .map(|p| token_start + p)
+                .unwrap_or(result.len());
+            if token_end.saturating_sub(token_start) >= 8 {
+                result.replace_range(token_start..token_end, "********");
+            }
+        }
+    }
+
+    let known_prefixes = ["ghp_", "gho_", "ghs_", "github_pat_", "sk-ant-", "sk-", "AKIA"];
+    for prefix in known_prefixes {
+        while let Some(pos) = result.find(prefix) {
+            let val_start = pos + prefix.len();
+            let val_end = result[val_start..]
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+                .map(|p| val_start + p)
+                .unwrap_or(result.len());
+            let token_len = val_end.saturating_sub(pos);
+            if token_len >= 12 {
+                result.replace_range(val_start..val_end, "***");
+            } else {
+                break;
+            }
+        }
+    }
+
+    let secret_keys = [
+        "api_key", "apikey", "api-key",
+        "secret", "client_secret",
+        "password", "passwd",
+        "access_token", "auth_token",
+    ];
+
+    let lower = result.to_lowercase();
+    for key in secret_keys {
+        if let Some(key_pos) = lower.find(key) {
+            let after_key = &result[key_pos + key.len()..];
+            if let Some(assign_offset) = after_key.find(['=', ':']) {
+                let assign_pos = key_pos + key.len() + assign_offset + 1;
+                let rest = &result[assign_pos..];
+                let trimmed_offset = rest.len() - rest.trim_start().len();
+                let val_start = assign_pos + trimmed_offset;
+                if val_start < result.len() {
+                    let quote_char = result[val_start..].chars().next().filter(|&c| c == '"' || c == '\'');
+                    let actual_start = if quote_char.is_some() { val_start + 1 } else { val_start };
+                    let actual_end = if let Some(q) = quote_char {
+                        result[actual_start..].find(q).map(|p| actual_start + p).unwrap_or(result.len())
+                    } else {
+                        result[actual_start..]
+                            .find(|c: char| c.is_whitespace() || c == ',' || c == ';')
+                            .map(|p| actual_start + p)
+                            .unwrap_or(result.len())
+                    };
+
+                    if actual_end.saturating_sub(actual_start) >= 4 {
+                        result.replace_range(actual_start..actual_end, "********");
+                    }
+                }
+            }
+        }
+    }
+
+    result
+}
+
 /// Extrae los archivos modificados en caliente en el working tree sin comandos lentos de shell.
 pub fn read_git_working_tree_files(root: &std::path::Path) -> Vec<String> {
     let output = std::process::Command::new("git")
@@ -423,7 +593,13 @@ pub fn read_git_working_tree_files(root: &std::path::Path) -> Vec<String> {
                 let trimmed = line.trim();
                 if trimmed.len() > 3 {
                     let file_path = trimmed[3..].trim();
-                    files.push(clean_file_basename(file_path));
+                    let basename = clean_file_basename(file_path);
+                    let display_name = if is_sensitive_file(file_path) {
+                        format!("🔒 {basename}")
+                    } else {
+                        basename
+                    };
+                    files.push(display_name);
                 }
             }
         }
@@ -467,7 +643,13 @@ pub fn read_git_last_commit_files(root: &std::path::Path) -> Vec<String> {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
                 let clean = line.trim();
                 if !clean.is_empty() {
-                    files.push(clean_file_basename(clean));
+                    let basename = clean_file_basename(clean);
+                    let display_name = if is_sensitive_file(clean) {
+                        format!("🔒 {basename}")
+                    } else {
+                        basename
+                    };
+                    files.push(display_name);
                 }
             }
         }
@@ -732,6 +914,50 @@ mod tests {
     fn test_clean_file_basename_trims_paths() {
         assert_eq!(clean_file_basename("src/client/shell/dock.rs"), "dock.rs");
         assert_eq!(clean_file_basename("report.md"), "report.md");
+    }
+
+    #[test]
+    fn test_is_sensitive_file_detects_credentials_without_false_positives() {
+        assert!(is_sensitive_file(".env"));
+        assert!(is_sensitive_file(".env.local"));
+        assert!(is_sensitive_file(".env.production"));
+        assert!(!is_sensitive_file(".env.example"));
+        assert!(!is_sensitive_file(".env.sample"));
+        assert!(is_sensitive_file(".ssh/id_rsa"));
+        assert!(is_sensitive_file("id_ed25519"));
+        assert!(is_sensitive_file("cert/server.key"));
+        assert!(is_sensitive_file("ca.pem"));
+        assert!(is_sensitive_file("credentials.json"));
+        assert!(is_sensitive_file("client_secret.json"));
+        assert!(is_sensitive_file("secrets.yaml"));
+        assert!(is_sensitive_file(".netrc"));
+        assert!(is_sensitive_file(".npmrc"));
+
+        // Source code must NOT be flagged as sensitive
+        assert!(!is_sensitive_file("src/auth.rs"));
+        assert!(!is_sensitive_file("pkg/authenticator.go"));
+        assert!(!is_sensitive_file("src/token_parser.ts"));
+        assert!(!is_sensitive_file("package.json"));
+        assert!(!is_sensitive_file("Cargo.toml"));
+        assert!(!is_sensitive_file("README.md"));
+    }
+
+    #[test]
+    fn test_sanitize_secret_line_redacts_tokens_and_keys() {
+        let line1 = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+        assert_eq!(sanitize_secret_line(line1), "Authorization: Bearer ********");
+
+        let line2 = "OPENAI_KEY = 'sk-proj-abc1234567890abcdef1234567890'";
+        assert!(sanitize_secret_line(line2).contains("sk-***") || sanitize_secret_line(line2).contains("********"));
+
+        let line3 = "GITHUB_PAT = ghp_1234567890abcdef1234567890abcdef";
+        assert!(sanitize_secret_line(line3).contains("ghp_***") || sanitize_secret_line(line3).contains("********"));
+
+        let line4 = "-----BEGIN RSA PRIVATE KEY-----";
+        assert_eq!(sanitize_secret_line(line4), "[-----REDACTED PRIVATE KEY-----]");
+
+        let line5 = "let normal_code = 123 + 456;";
+        assert_eq!(sanitize_secret_line(line5), line5);
     }
 }
 

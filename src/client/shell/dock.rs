@@ -874,8 +874,39 @@ impl RightDockState {
             if entry.is_dir {
                 self.files_tab.toggle_selected_expanded();
             } else if let Some(root) = &self.files_tab.cached_root {
+                let rel_str = entry.relative_path.to_string_lossy();
+
+                // 1. Verificación anti-fugas de archivos sensibles (credenciales, .env, claves)
+                if super::telemetry::is_sensitive_file(&rel_str) {
+                    let lines = vec![
+                        "[SEGURIDAD: PREVISUALIZACIÓN BLOQUEADA]".to_string(),
+                        "".to_string(),
+                        format!("Archivo: {}", entry.name),
+                        "Ruta clasificada como credencial o archivo con secretos sensibles.".to_string(),
+                        "La previsualización en texto plano ha sido bloqueada automáticamente".to_string(),
+                        "para prevenir fugas accidentales en pantalla compartida o logs.".to_string(),
+                    ];
+                    self.quick_peek = Some(QuickPeekState::new(format!("🔒 {}", entry.name), lines));
+                    return;
+                }
+
+                // 2. Verificación de path traversal
+                if entry.relative_path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                    let lines = vec!["[Error: Ruta fuera de los límites del workspace]".to_string()];
+                    self.quick_peek = Some(QuickPeekState::new(entry.name, lines));
+                    return;
+                }
+
                 let file_path = root.join(&entry.relative_path);
-                // Lectura acotada con tope de tamaño (máx 128 KB y 100 líneas) para evitar freeze
+                if let (Ok(canon_root), Ok(canon_file)) = (root.canonicalize(), file_path.canonicalize()) {
+                    if !canon_file.starts_with(&canon_root) {
+                        let lines = vec!["[Error: Acceso bloqueado - ruta fuera del workspace]".to_string()];
+                        self.quick_peek = Some(QuickPeekState::new(entry.name, lines));
+                        return;
+                    }
+                }
+
+                // 3. Lectura acotada con tope de tamaño y sanitización línea a línea
                 let lines = match std::fs::File::open(&file_path) {
                     Ok(file) => {
                         use std::io::{BufRead, BufReader, Read};
@@ -888,7 +919,7 @@ impl RightDockState {
                                 Ok(0) => break, // EOF o reached 128KB
                                 Ok(_) => {
                                     let trimmed = line_buf.trim_end_matches(['\r', '\n']);
-                                    collected.push(trimmed.to_string());
+                                    collected.push(super::telemetry::sanitize_secret_line(trimmed));
                                 }
                                 Err(_) => {
                                     if collected.is_empty() {
@@ -2380,6 +2411,34 @@ mod tests {
         assert_eq!(dock.files_tab.entries.len(), 4);
         dock.files_tab.refresh_if_needed(&root.0);
         assert!(!dock.files_tab.entries[0].is_expanded);
+    }
+
+    #[test]
+    fn activate_file_selection_blocks_sensitive_files_and_sanitizes_tokens() {
+        let root = TreeFixture::new();
+        std::fs::write(root.0.join(".env"), "DATABASE_URL=postgres://user:super_secret_pw@db:5432\nAPI_KEY=sk-proj-1234567890abcdef1234567890\n").unwrap();
+        std::fs::write(root.0.join("safe.txt"), "Authorization: Bearer secret_access_token_12345\nNormal text line\n").unwrap();
+
+        let mut dock = RightDockState::default();
+        dock.files_tab.refresh_if_needed(&root.0);
+
+        let env_idx = dock.files_tab.entries.iter().position(|e| e.name == ".env").unwrap();
+        dock.files_tab.selected_index = env_idx;
+        dock.activate_file_selection();
+
+        let peek = dock.quick_peek.as_ref().unwrap();
+        assert!(peek.title.contains("🔒"));
+        assert!(peek.lines[0].contains("SEGURIDAD: PREVISUALIZACIÓN BLOQUEADA"));
+        assert!(!peek.lines.iter().any(|l| l.contains("super_secret_pw")));
+
+        let safe_idx = dock.files_tab.entries.iter().position(|e| e.name == "safe.txt").unwrap();
+        dock.files_tab.selected_index = safe_idx;
+        dock.activate_file_selection();
+
+        let safe_peek = dock.quick_peek.as_ref().unwrap();
+        assert_eq!(safe_peek.title, "safe.txt");
+        assert_eq!(safe_peek.lines[0], "Authorization: Bearer ********");
+        assert_eq!(safe_peek.lines[1], "Normal text line");
     }
 
     #[test]
