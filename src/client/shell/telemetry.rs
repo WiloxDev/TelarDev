@@ -273,7 +273,10 @@ pub fn read_git_head_info(root: &std::path::Path) -> (Option<String>, Option<Str
             for line in packed.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() == 2 && parts[1] == branch_ref && parts[0].len() >= 7 {
-                    return (Some(branch_name.to_string()), Some(parts[0][..7].to_string()));
+                    return (
+                        Some(branch_name.to_string()),
+                        Some(parts[0][..7].to_string()),
+                    );
                 }
             }
         }
@@ -499,7 +502,9 @@ pub fn read_last_commit_message(root: &std::path::Path) -> Option<String> {
     let git_dir = resolve_git_dir(root)?;
     let msg_path = git_dir.join("COMMIT_EDITMSG");
     if let Ok(content) = std::fs::read_to_string(msg_path) {
-        let first_line = content.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#'))?;
+        let first_line = content
+            .lines()
+            .find(|l| !l.trim().is_empty() && !l.starts_with('#'))?;
         return Some(first_line.to_string());
     }
     None
@@ -531,7 +536,9 @@ pub fn read_git_remotes_info(root: &std::path::Path) -> (String, String) {
 }
 
 /// Consulta de forma síncrona/ligera metadatos de GitHub PR si `gh` está disponible.
-pub fn try_query_github_pr(root: &std::path::Path) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
+pub fn try_query_github_pr(
+    root: &std::path::Path,
+) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
     let output = std::process::Command::new("gh")
         .current_dir(root)
         .args([
@@ -560,7 +567,13 @@ pub fn try_query_github_pr(root: &std::path::Path) -> Option<(u32, String, (usiz
     let pr: GhPr = serde_json::from_slice(&output.stdout).ok()?;
     let approved = pr.review_decision.as_deref() == Some("APPROVED");
     let stack = vec![pr.number.saturating_sub(1), pr.number, pr.number + 1];
-    Some((pr.number, pr.title, (pr.additions, pr.deletions), approved, stack))
+    Some((
+        pr.number,
+        pr.title,
+        (pr.additions, pr.deletions),
+        approved,
+        stack,
+    ))
 }
 
 /// Construye un snapshot vivo y dinámico a partir de la inspección de metadatos locales y GitHub.
@@ -584,11 +597,15 @@ pub fn build_live_git_flow_snapshot(
     let recent_commits = read_git_recent_commits(root, 2);
     let committed_files = read_git_last_commit_files(root);
     let working_files = read_git_working_tree_files(root);
-    let pr_data = try_query_github_pr(root).map(|(num, title, _, approved, _)| (num, title, approved));
+    let pr_data =
+        try_query_github_pr(root).map(|(num, title, _, approved, _)| (num, title, approved));
 
     let active_session = Some(super::git_flow::WorktreeSessionFlow {
         workspace_id: String::new(),
-        workspace_name: root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "workspace".to_string()),
+        workspace_name: root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "workspace".to_string()),
         branch: active_branch.clone(),
         is_focused: true,
         agent_name: Some("pi".to_string()),
@@ -600,7 +617,10 @@ pub fn build_live_git_flow_snapshot(
     });
 
     // 01 COMMIT
-    let commit_msg = recent_commits.first().map(|(_, msg)| msg.clone()).unwrap_or_else(|| "feat: commit actual".to_string());
+    let commit_msg = recent_commits
+        .first()
+        .map(|(_, msg)| msg.clone())
+        .unwrap_or_else(|| "feat: commit actual".to_string());
     steps.push(super::git_flow::GitFlowStep::Commit {
         hash: current_sha,
         branch: active_branch.clone(),
@@ -634,7 +654,12 @@ pub fn build_live_git_flow_snapshot(
 
     // Operación en progreso especial si la hay
     let active_alert = match detect_in_progress_git_op(root) {
-        Some(InProgressGitOp::Rebase { step, total, onto_commit, has_conflict }) => {
+        Some(InProgressGitOp::Rebase {
+            step,
+            total,
+            onto_commit,
+            has_conflict,
+        }) => {
             steps.push(super::git_flow::GitFlowStep::Rebase {
                 in_progress: true,
                 step,
@@ -701,6 +726,131 @@ pub fn build_live_git_flow_snapshot(
     }
 }
 
+// ==============================================================================
+// Engram Telemetry & Zero-CPU Daemon Probe
+// ==============================================================================
+
+/// Consulta HTTP/1.0 ultra-ligera contra el daemon local de Engram (`127.0.0.1:<port>`)
+/// usando únicamente std::net::TcpStream con timeouts acotados (0% dependencias externas).
+pub fn query_engram_daemon(port: u16, path: &str) -> Option<serde_json::Value> {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream =
+        std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(80)).ok()?;
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(200)));
+    let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(100)));
+
+    let req = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nAccept: application/json\r\n\r\n");
+    stream.write_all(req.as_bytes()).ok()?;
+
+    let mut buf = Vec::new();
+    stream.take(64 * 1024).read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    let (_head, body) = text.split_once("\r\n\r\n")?;
+    serde_json::from_str(body).ok()
+}
+
+/// Resuelve la ruta al archivo de base de datos de Engram (`engram.db`)
+pub fn resolve_engram_db_path() -> Option<std::path::PathBuf> {
+    // 1. Variable de entorno explícita
+    if let Ok(p) = std::env::var("ENGRAM_DB_PATH") {
+        let p_buf = std::path::PathBuf::from(p.trim());
+        if p_buf.is_file() {
+            return Some(p_buf);
+        }
+    }
+
+    // 2. Directorio ~/.engram/engram.db en USERPROFILE o HOME
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    if let Some(home_dir) = home {
+        let candidate = home_dir.join(".engram").join("engram.db");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 3. En Windows, revisar unidades de disco estándar para instalaciones portables
+    #[cfg(target_os = "windows")]
+    {
+        for drive in ["C:\\", "D:\\"] {
+            let candidate = std::path::Path::new(drive)
+                .join(".engram")
+                .join("engram.db");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Inspecciona el encabezado SQLite de 100 bytes para verificar que sea una base válida
+/// y extraer el conteo de páginas de la base de datos sin requerir C o rusqlite.
+pub fn inspect_engram_db_header(db_path: &std::path::Path) -> Option<(u32, u64)> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(db_path).ok()?;
+    let mut header = [0u8; 100];
+    file.read_exact(&mut header).ok()?;
+
+    // Verificar firma SQLite 3: "SQLite format 3\0"
+    if &header[0..16] != b"SQLite format 3\0" {
+        return None;
+    }
+
+    let page_count = u32::from_be_bytes([header[28], header[29], header[30], header[31]]);
+    let mtime = db_path
+        .metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    Some((page_count, mtime))
+}
+
+/// Sincroniza la telemetría viva de Engram:
+/// - Sonda al daemon local (port 7437 o ENGRAM_PORT)
+/// - Si no responde, verifica presencia y firma del archivo local engram.db
+pub fn refresh_engram_telemetry(project_name: &str, current: &mut EngramTelemetry) {
+    let port: u16 = std::env::var("ENGRAM_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(7437);
+
+    current.project_name = project_name.to_string();
+
+    // 1. Sonda rápida al daemon local
+    if let Some(health) = query_engram_daemon(port, "/health") {
+        if health.get("status").and_then(|s| s.as_str()) == Some("ok") {
+            current.is_online = true;
+            current.port = port;
+
+            if let Some(sync_val) =
+                query_engram_daemon(port, &format!("/sync/status?project={project_name}"))
+            {
+                if let Some(phase) = sync_val.get("phase").and_then(|s| s.as_str()) {
+                    current.cloud_status = phase.to_string();
+                }
+            }
+            return;
+        }
+    }
+
+    // 2. Si el daemon HTTP no está respondiendo, verificar existencia física de la base de datos
+    if let Some(db_path) = resolve_engram_db_path() {
+        if let Some((_pages, _mtime)) = inspect_engram_db_header(&db_path) {
+            current.is_online = true;
+            current.port = 0;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -733,5 +883,41 @@ mod tests {
         assert_eq!(clean_file_basename("src/client/shell/dock.rs"), "dock.rs");
         assert_eq!(clean_file_basename("report.md"), "report.md");
     }
-}
 
+    #[test]
+    fn test_query_engram_daemon_offline_graceful() {
+        // Un puerto no enlazado debe fallar de inmediato sin bloquear ni entrar en pánico
+        let res = query_engram_daemon(59999, "/health");
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_inspect_engram_db_header_validation() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("telar-engram-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let fake_db = temp_dir.join("engram.db");
+
+        // 1. Archivo inválido (no SQLite)
+        std::fs::write(&fake_db, b"not a sqlite db").unwrap();
+        assert!(inspect_engram_db_header(&fake_db).is_none());
+
+        // 2. Archivo válido con encabezado SQLite 3
+        let mut header = vec![0u8; 100];
+        header[0..16].copy_from_slice(b"SQLite format 3\0");
+        // Page size = 4096 (0x1000)
+        header[16] = 0x10;
+        header[17] = 0x00;
+        // Page count = 42
+        header[28..32].copy_from_slice(&42u32.to_be_bytes());
+
+        std::fs::write(&fake_db, &header).unwrap();
+        let (pages, mtime) = inspect_engram_db_header(&fake_db).expect("valid sqlite header");
+        assert_eq!(pages, 42);
+        assert!(mtime > 0);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}

@@ -167,6 +167,14 @@ impl StatusTab {
         if let Some(head) = super::telemetry::read_git_head_short(root) {
             self.telemetry.git.head_commit = Some(head);
         }
+
+        // Sincronización viva de Engram a 0% de CPU
+        let project_name = root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "project".to_string());
+        super::telemetry::refresh_engram_telemetry(&project_name, &mut self.telemetry.engram);
+
         self.is_dirty = false;
     }
 
@@ -1831,13 +1839,26 @@ fn render_status_content(
 
             if has_engram && cur_y < bottom_limit {
                 let obs_id = status_tab.telemetry.engram.observations_count;
-                let mem_str = format!("- 🧠 {ws_name} · ✓ saved #{obs_id}");
+                let mem_str = if obs_id > 0 {
+                    format!("- 🧠 {ws_name} · ✓ saved #{obs_id}")
+                } else if status_tab.telemetry.engram.port > 0 {
+                    format!("- 🧠 {ws_name} · daemon:{}", status_tab.telemetry.engram.port)
+                } else {
+                    format!("- 🧠 {ws_name} · ✓ engram online")
+                };
+
+                let engram_style = if !status_tab.telemetry.engram.cloud_status.is_empty() {
+                    Style::default().fg(config.palette.green)
+                } else {
+                    Style::default().fg(config.palette.mauve)
+                };
+
                 buffer.set_stringn(
                     x + 2,
                     cur_y,
                     mem_str,
                     rail_w.saturating_sub(2) as usize,
-                    Style::default().fg(config.palette.mauve),
+                    engram_style,
                 );
                 cur_y += 1;
             }
@@ -3403,5 +3424,44 @@ mod tests {
         assert_eq!(expanded_buffer[(96, 0)].symbol(), "[");
         assert_eq!(expanded_buffer[(97, 0)].symbol(), "»");
         assert_eq!(expanded_buffer[(98, 0)].symbol(), "]");
+    }
+
+    #[test]
+    fn test_status_tab_renders_engram_daemon_status() {
+        let area = Rect::new(0, 0, 48, 40);
+        let mut buffer = Buffer::empty(area);
+        let config = ClientShellConfig::default();
+        let mut status_tab = StatusTab::new();
+
+        status_tab.telemetry.engram = super::telemetry::EngramTelemetry {
+            project_name: "telardev".to_string(),
+            port: 7437,
+            is_online: true,
+            observations_count: 0,
+            cloud_status: "synced".to_string(),
+        };
+
+        render_status_tab_gentle_hud(
+            &mut buffer,
+            0,
+            0,
+            48,
+            40,
+            &config,
+            &mut status_tab,
+            None,
+            &mut None,
+        );
+
+        let mut rendered_text = String::new();
+        for y in 0..40 {
+            for x in 0..48 {
+                rendered_text.push_str(buffer[(x, y)].symbol());
+            }
+            rendered_text.push('\n');
+        }
+
+        assert!(rendered_text.contains("INTEGRATIONS"));
+        assert!(rendered_text.contains("daemon:7437"));
     }
 }
