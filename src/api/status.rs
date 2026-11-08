@@ -26,10 +26,7 @@ pub fn read_runtime_status_at(
         id: "runtime:status".into(),
         method: Method::Ping(crate::api::schema::PingParams::default()),
     };
-    let response = client
-        .request_value_with_timeout(&request, timeout)
-        .and_then(crate::api::client::parse_response_value);
-    let response = match response {
+    let response = match client.request_with_timeout(request, timeout) {
         Ok(response) => response,
         Err(crate::api::client::ApiClientError::Io(err))
             if matches!(

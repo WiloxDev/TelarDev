@@ -60,17 +60,30 @@ impl ApiClient {
         read_json_line(&mut reader)
     }
 
+    pub fn request_with_timeout(
+        &self,
+        request: Request,
+        timeout: Duration,
+    ) -> Result<SuccessResponse, ApiClientError> {
+        let value = self.request_value_with_timeout(&request, timeout)?;
+        parse_response_value(value)
+    }
+
     pub fn request_value_with_timeout(
         &self,
         request: &Request,
         timeout: Duration,
     ) -> Result<serde_json::Value, ApiClientError> {
         let mut stream = self.connect()?;
-        set_timeout_best_effort(&stream, TimeoutKind::Send, timeout)?;
-        set_timeout_best_effort(&stream, TimeoutKind::Recv, timeout)?;
+        set_send_timeout_best_effort(&stream, timeout)?;
         write_request(&mut stream, request)?;
 
-        let mut reader = BufReader::new(stream);
+        crate::ipc::set_local_stream_polling(&mut stream, true)?;
+        let mut reader = BufReader::new(DeadlineReader {
+            stream: &mut stream,
+            deadline: Instant::now() + timeout,
+            timeout_message: "api request timed out",
+        });
         read_json_line(&mut reader)
     }
 
@@ -94,16 +107,7 @@ impl ApiClient {
             method: Method::Ping(PingParams::default()),
         };
         let response = match timeout {
-            Some(timeout) => {
-                let mut stream = self.connect()?;
-                write_request(&mut stream, &request)?;
-                crate::ipc::set_local_stream_polling(&mut stream, true)?;
-                let mut reader = BufReader::new(DeadlineReader {
-                    stream: &mut stream,
-                    deadline: Instant::now() + timeout,
-                });
-                parse_response_value(read_json_line(&mut reader)?)?
-            }
+            Some(timeout) => self.request_with_timeout(request, timeout)?,
             None => self.request(request)?,
         };
         match response.result {
@@ -125,21 +129,8 @@ impl ApiClient {
     }
 }
 
-enum TimeoutKind {
-    Send,
-    Recv,
-}
-
-fn set_timeout_best_effort(
-    stream: &LocalStream,
-    kind: TimeoutKind,
-    timeout: Duration,
-) -> io::Result<()> {
-    let result = match kind {
-        TimeoutKind::Send => stream.set_send_timeout(Some(timeout)),
-        TimeoutKind::Recv => stream.set_recv_timeout(Some(timeout)),
-    };
-    match result {
+fn set_send_timeout_best_effort(stream: &LocalStream, timeout: Duration) -> io::Result<()> {
+    match stream.set_send_timeout(Some(timeout)) {
         Ok(()) => Ok(()),
         #[cfg(windows)]
         Err(err) if err.kind() == io::ErrorKind::Unsupported => Ok(()),
@@ -192,6 +183,7 @@ fn write_request(stream: &mut LocalStream, request: &Request) -> Result<(), ApiC
 struct DeadlineReader<'a> {
     stream: &'a mut LocalStream,
     deadline: Instant,
+    timeout_message: &'static str,
 }
 
 impl Read for DeadlineReader<'_> {
@@ -203,7 +195,7 @@ impl Read for DeadlineReader<'_> {
             if Instant::now() >= self.deadline {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
-                    "server status probe timed out",
+                    self.timeout_message,
                 ));
             }
             // Windows named pipes have no read timeout; peek-before-read keeps
@@ -275,6 +267,64 @@ mod tests {
         let client = ApiClient::for_target(ConnectionTarget::SocketPath(path.clone()));
         let error = client
             .status_with_timeout(Duration::from_millis(100))
+            .unwrap_err();
+        assert!(
+            matches!(error, ApiClientError::Io(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock))
+        );
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn request_value_with_timeout_closes_a_stalled_request() {
+        #[cfg(unix)]
+        use interprocess::local_socket::traits::Listener as _;
+        let path = std::env::temp_dir()
+            .join(format!("herdr-reqval-timeout-{}.sock", std::process::id()));
+        let listener = crate::ipc::bind_private_local_listener(&path).unwrap();
+        let server = std::thread::spawn(move || {
+            let stream = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            std::thread::sleep(Duration::from_millis(300));
+        });
+        let client = ApiClient::for_target(ConnectionTarget::SocketPath(path.clone()));
+        let request = Request {
+            id: "test:timeout".into(),
+            method: Method::Ping(PingParams::default()),
+        };
+        let error = client
+            .request_value_with_timeout(&request, Duration::from_millis(100))
+            .unwrap_err();
+        assert!(
+            matches!(error, ApiClientError::Io(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock))
+        );
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn request_with_timeout_closes_a_stalled_request() {
+        #[cfg(unix)]
+        use interprocess::local_socket::traits::Listener as _;
+        let path = std::env::temp_dir()
+            .join(format!("herdr-req-timeout-{}.sock", std::process::id()));
+        let listener = crate::ipc::bind_private_local_listener(&path).unwrap();
+        let server = std::thread::spawn(move || {
+            let stream = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).unwrap();
+            std::thread::sleep(Duration::from_millis(300));
+        });
+        let client = ApiClient::for_target(ConnectionTarget::SocketPath(path.clone()));
+        let request = Request {
+            id: "test:timeout".into(),
+            method: Method::Ping(PingParams::default()),
+        };
+        let error = client
+            .request_with_timeout(request, Duration::from_millis(100))
             .unwrap_err();
         assert!(
             matches!(error, ApiClientError::Io(error) if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock))
