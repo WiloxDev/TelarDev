@@ -167,6 +167,12 @@ impl StatusTab {
         if let Some(head) = super::telemetry::read_git_head_short(root) {
             self.telemetry.git.head_commit = Some(head);
         }
+
+        // Descubrimiento de cuotas e integraciones de CLIProxy / CPAMC
+        let (accounts, model_quotas) = super::telemetry::refresh_cliproxy_telemetry(root);
+        self.telemetry.accounts = accounts;
+        self.telemetry.model_quotas = model_quotas;
+
         self.is_dirty = false;
     }
 
@@ -1798,10 +1804,12 @@ fn render_status_content(
     if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(5);
         let mcp_count = status_tab.telemetry.mcp_servers.len();
-        let int_count_str = if mcp_count == 0 {
+        let accounts_count = status_tab.telemetry.accounts.len();
+        let total_integrations = mcp_count + accounts_count;
+        let int_count_str = if total_integrations == 0 {
             "0".to_string()
         } else {
-            mcp_count.to_string()
+            total_integrations.to_string()
         };
 
         render_panel_header_rail(
@@ -1822,6 +1830,7 @@ fn render_status_content(
         if !is_col {
             let has_profile = !status_tab.telemetry.model_name.is_empty();
             let has_engram = status_tab.telemetry.engram.is_online || status_tab.telemetry.engram.observations_count > 0;
+            let has_accounts = !status_tab.telemetry.accounts.is_empty();
 
             if has_profile && cur_y < bottom_limit {
                 let profile_str = format!("Agent profile: {}", status_tab.telemetry.model_name);
@@ -1842,7 +1851,55 @@ fn render_status_content(
                 cur_y += 1;
             }
 
-            if mcp_count == 0 && !has_profile && !has_engram {
+            // CLIProxyAPI / CPAMC Accounts
+            for acc in &status_tab.telemetry.accounts {
+                if cur_y >= bottom_limit {
+                    break;
+                }
+                let pct_style = if acc.percent < 15 {
+                    Style::default().fg(config.palette.red)
+                } else if acc.percent < 30 {
+                    Style::default().fg(config.palette.yellow)
+                } else {
+                    Style::default().fg(config.palette.green)
+                };
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    acc.role_symbol,
+                    &acc.name,
+                    Some(&acc.quota_desc),
+                    pct_style,
+                    val_text,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            // Model Quotas
+            for mq in &status_tab.telemetry.model_quotas {
+                if cur_y >= bottom_limit {
+                    break;
+                }
+                let desc = format!("{} · {}", mq.indicator, mq.reset_in);
+                render_panel_kv_rail(
+                    buffer,
+                    x + 2,
+                    cur_y,
+                    rail_w.saturating_sub(2),
+                    "◆ ",
+                    &mq.model_name,
+                    Some(&desc),
+                    Style::default().fg(config.palette.blue),
+                    val_text,
+                    val_dim,
+                );
+                cur_y += 1;
+            }
+
+            if mcp_count == 0 && !has_profile && !has_engram && !has_accounts {
                 if cur_y < bottom_limit {
                     render_panel_kv_rail(
                         buffer,
@@ -3403,5 +3460,52 @@ mod tests {
         assert_eq!(expanded_buffer[(96, 0)].symbol(), "[");
         assert_eq!(expanded_buffer[(97, 0)].symbol(), "»");
         assert_eq!(expanded_buffer[(98, 0)].symbol(), "]");
+    }
+
+    #[test]
+    fn test_status_tab_renders_cliproxy_accounts_and_model_quotas() {
+        let area = Rect::new(0, 0, 48, 40);
+        let mut buffer = Buffer::empty(area);
+        let config = ClientShellConfig::default();
+        let mut status_tab = StatusTab::new();
+
+        status_tab.telemetry.accounts.push(super::telemetry::AccountQuota {
+            name: "can-claude".to_string(),
+            percent: 85,
+            is_leader: true,
+            role_symbol: "⚡",
+            quota_desc: "85% · reset 4h 59m".to_string(),
+        });
+
+        status_tab.telemetry.model_quotas.push(super::telemetry::ModelQuota {
+            model_name: "Claude 3.7".to_string(),
+            window_type: "5h".to_string(),
+            indicator: "85%".to_string(),
+            reset_in: "4h 59m".to_string(),
+        });
+
+        render_status_tab_gentle_hud(
+            &mut buffer,
+            0,
+            0,
+            48,
+            40,
+            &config,
+            &mut status_tab,
+            None,
+            &mut None,
+        );
+
+        let mut rendered_text = String::new();
+        for y in 0..40 {
+            for x in 0..48 {
+                rendered_text.push_str(buffer[(x, y)].symbol());
+            }
+            rendered_text.push('\n');
+        }
+
+        assert!(rendered_text.contains("INTEGRATIONS"));
+        assert!(rendered_text.contains("can-claude"));
+        assert!(rendered_text.contains("Claude 3.7"));
     }
 }
