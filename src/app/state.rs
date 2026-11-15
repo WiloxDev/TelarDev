@@ -827,8 +827,8 @@ impl Palette {
     /// Gentleman Programming — Obsidian and soft blush signature aesthetic from Gentleman-Programming and Gentle-Shell.
     pub fn gentleman() -> Self {
         Self {
-            accent: Color::Rgb(240, 149, 200),      // #f095c8 - soft blush rose (gentle stack signature)
-            panel_bg: Color::Rgb(25, 18, 24),      // #191218 - dark obsidian/plum panel
+            accent: Color::Rgb(240, 149, 200), // #f095c8 - soft blush rose (gentle stack signature)
+            panel_bg: Color::Rgb(25, 18, 24),  // #191218 - dark obsidian/plum panel
             sidebar_bg: Color::Reset,
             active_row_bg: Color::Rgb(40, 24, 36), // #281824 - subtle plum active row
             selection_bg: Color::Rgb(65, 36, 54),  // #412436 - navigate selection
@@ -1887,7 +1887,10 @@ mod tests {
         assert_eq!(palette.overlay0, Color::Rgb(141, 119, 131));
         // Active tab pill contrast ratio against dark background
         let contrast = contrast_ratio(palette.panel_bg, palette.accent);
-        assert!(contrast >= 7.0, "accent pill contrast must be >= 7.0: {contrast:.2}:1");
+        assert!(
+            contrast >= 7.0,
+            "accent pill contrast must be >= 7.0: {contrast:.2}:1"
+        );
     }
 
     #[test]

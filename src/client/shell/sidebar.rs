@@ -717,7 +717,10 @@ pub(in crate::client::shell) fn workspace_display_label<'a>(
         .collect::<Vec<_>>();
 
     if duplicates.len() > 1 {
-        if let Some(pos) = duplicates.iter().position(|w| w.workspace_id == workspace.workspace_id) {
+        if let Some(pos) = duplicates
+            .iter()
+            .position(|w| w.workspace_id == workspace.workspace_id)
+        {
             if pos > 0 {
                 return std::borrow::Cow::Owned(format!("{base_label} ({})", pos + 1));
             }
@@ -1071,7 +1074,8 @@ mod tests {
         state.set_snapshot(Box::new(crate::client::shell::tests::snapshot()));
         state.set_pane_surface(crate::client::shell::tests::surface());
 
-        let temp_dir = std::env::temp_dir().join(format!("herdr-test-net-click-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("herdr-test-net-click-{}", std::process::id()));
         std::fs::create_dir_all(temp_dir.join("sub-one")).unwrap();
         std::fs::create_dir_all(temp_dir.join("sub-two")).unwrap();
 
@@ -1113,7 +1117,10 @@ mod tests {
             &mut outcome,
         );
 
-        assert!(state.overlay.is_none(), "Clicking a project row must close the overlay");
+        assert!(
+            state.overlay.is_none(),
+            "Clicking a project row must close the overlay"
+        );
 
         let created_action = outcome.actions.iter().any(|action| {
             if let ClientShellAction::Endpoint { request, .. } = action {

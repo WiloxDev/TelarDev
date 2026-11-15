@@ -484,7 +484,8 @@ impl ClientShellConfig {
         if actual_sidebar_width + actual_dock_width > available_for_panels {
             // 1. Si no hay espacio para la terminal, degradamos el dock derecho a rail
             if !right_dock_collapsed && actual_dock_width > 3 {
-                let excess = (actual_sidebar_width + actual_dock_width).saturating_sub(available_for_panels);
+                let excess =
+                    (actual_sidebar_width + actual_dock_width).saturating_sub(available_for_panels);
                 if actual_dock_width.saturating_sub(excess) >= self.right_dock_min_width {
                     actual_dock_width = actual_dock_width.saturating_sub(excess);
                 } else {

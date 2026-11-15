@@ -324,12 +324,33 @@ mod tests {
         let endpoint = "127.0.0.1:8319".parse().unwrap();
         apply_proxy_env(&mut cmd, endpoint);
 
-        assert_eq!(cmd.get_env("HTTP_PROXY"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("HTTPS_PROXY"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("ALL_PROXY"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("http_proxy"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("https_proxy"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("all_proxy"), Some(OsStr::new("http://127.0.0.1:8319")));
-        assert_eq!(cmd.get_env("OPENAI_BASE_URL"), Some(OsStr::new("http://127.0.0.1:8319/v1")));
+        assert_eq!(
+            cmd.get_env("HTTP_PROXY"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("HTTPS_PROXY"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("ALL_PROXY"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("http_proxy"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("https_proxy"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("all_proxy"),
+            Some(OsStr::new("http://127.0.0.1:8319"))
+        );
+        assert_eq!(
+            cmd.get_env("OPENAI_BASE_URL"),
+            Some(OsStr::new("http://127.0.0.1:8319/v1"))
+        );
     }
 }

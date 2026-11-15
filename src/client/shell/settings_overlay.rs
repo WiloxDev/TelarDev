@@ -76,9 +76,19 @@ pub(super) fn render_settings_overlay(
             .any(|integration| integration.state == crate::api::schema::IntegrationState::Outdated);
     let mut tab_x = inner.x;
     let mut tab_hits = Vec::new();
-    let selected_index = ClientSettingsSection::ALL.iter().position(|section| *section == settings.section).unwrap_or(0);
-    let total_width: u16 = ClientSettingsSection::ALL.iter().map(|section| display_width(section.label()) + 3).sum();
-    let start = if total_width > inner.width { selected_index } else { 0 };
+    let selected_index = ClientSettingsSection::ALL
+        .iter()
+        .position(|section| *section == settings.section)
+        .unwrap_or(0);
+    let total_width: u16 = ClientSettingsSection::ALL
+        .iter()
+        .map(|section| display_width(section.label()) + 3)
+        .sum();
+    let start = if total_width > inner.width {
+        selected_index
+    } else {
+        0
+    };
     for section in &ClientSettingsSection::ALL[start..] {
         let badge = *section == ClientSettingsSection::Integrations && integration_badge;
         let label = if badge {
@@ -152,12 +162,7 @@ pub(super) fn render_settings_overlay(
                 .take(visible)
                 .enumerate()
             {
-                let rect = Rect::new(
-                    content.x,
-                    content.y + visible_index as u16,
-                    item_width,
-                    1,
-                );
+                let rect = Rect::new(content.x, content.y + visible_index as u16, item_width, 1);
                 let display_label = if *name == "terminal" {
                     format!("{name} [system]")
                 } else if let Some(p) = Palette::from_name(name) {
@@ -262,7 +267,11 @@ pub(super) fn render_settings_overlay(
                     break;
                 }
                 let rect = Rect::new(content.x, content.y + index as u16, content.width, 1);
-                let checked = if settings.sidebar_visibility[index] { "x" } else { " " };
+                let checked = if settings.sidebar_visibility[index] {
+                    "x"
+                } else {
+                    " "
+                };
                 draw_choice(
                     buffer,
                     rect,
@@ -702,7 +711,11 @@ fn render_typography(
                     right_x,
                     cur_y,
                     right_width,
-                    &format!("target: {} ({})", host.display_name(), host.config_location()),
+                    &format!(
+                        "target: {} ({})",
+                        host.display_name(),
+                        host.config_location()
+                    ),
                     Style::default()
                         .fg(palette.accent)
                         .bg(palette.panel_bg)
@@ -712,7 +725,12 @@ fn render_typography(
             }
 
             if cur_y < area.bottom() {
-                let rect = Rect::new(right_x, cur_y, right_width.min(directive.len() as u16 + 2), 1);
+                let rect = Rect::new(
+                    right_x,
+                    cur_y,
+                    right_width.min(directive.len() as u16 + 2),
+                    1,
+                );
                 buffer.set_style(rect, Style::default().bg(palette.surface0));
                 put_text(
                     buffer,

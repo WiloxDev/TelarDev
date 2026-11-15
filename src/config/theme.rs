@@ -288,7 +288,10 @@ mod tests {
     fn theme_display_order_matches_all_theme_names() {
         assert_eq!(THEME_DISPLAY_ORDER.len(), THEME_NAMES.len());
         for name in THEME_DISPLAY_ORDER {
-            assert!(THEME_NAMES.contains(name), "missing theme in THEME_NAMES: {name}");
+            assert!(
+                THEME_NAMES.contains(name),
+                "missing theme in THEME_NAMES: {name}"
+            );
         }
     }
 

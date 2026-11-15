@@ -263,15 +263,17 @@ fn sibling_theme_names(name: &str) -> (String, String) {
         "everforest" | "everforest-dark" | "everforest-light" => {
             ("everforest".to_string(), "everforest-light".to_string())
         }
-        "catppuccin-frappe" | "frappe" => {
-            ("catppuccin-frappe".to_string(), "catppuccin-latte".to_string())
-        }
+        "catppuccin-frappe" | "frappe" => (
+            "catppuccin-frappe".to_string(),
+            "catppuccin-latte".to_string(),
+        ),
         "github-dark-dimmed" | "github-dimmed" | "dimmed" => {
             ("github-dark-dimmed".to_string(), "one-light".to_string())
         }
-        "monokai-pro-octagon" | "monokai-octagon" | "octagon" => {
-            ("monokai-pro-octagon".to_string(), "gruvbox-light".to_string())
-        }
+        "monokai-pro-octagon" | "monokai-octagon" | "octagon" => (
+            "monokai-pro-octagon".to_string(),
+            "gruvbox-light".to_string(),
+        ),
         "gentleman" | "gentle" | "gentleman-sexy" => {
             ("gentleman".to_string(), "rose-pine-dawn".to_string())
         }
@@ -712,7 +714,8 @@ impl App {
         // Auto-heal de integraciones en background: asegura extensiones de agentes instalados
         if policy.background_updates {
             crate::integration::auto_heal_integrations();
-            app.state.integration_recommendations = crate::integration::integration_recommendations();
+            app.state.integration_recommendations =
+                crate::integration::integration_recommendations();
         }
 
         Ok(app)

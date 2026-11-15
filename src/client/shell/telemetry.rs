@@ -273,7 +273,10 @@ pub fn read_git_head_info(root: &std::path::Path) -> (Option<String>, Option<Str
             for line in packed.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() == 2 && parts[1] == branch_ref && parts[0].len() >= 7 {
-                    return (Some(branch_name.to_string()), Some(parts[0][..7].to_string()));
+                    return (
+                        Some(branch_name.to_string()),
+                        Some(parts[0][..7].to_string()),
+                    );
                 }
             }
         }
@@ -499,7 +502,9 @@ pub fn read_last_commit_message(root: &std::path::Path) -> Option<String> {
     let git_dir = resolve_git_dir(root)?;
     let msg_path = git_dir.join("COMMIT_EDITMSG");
     if let Ok(content) = std::fs::read_to_string(msg_path) {
-        let first_line = content.lines().find(|l| !l.trim().is_empty() && !l.starts_with('#'))?;
+        let first_line = content
+            .lines()
+            .find(|l| !l.trim().is_empty() && !l.starts_with('#'))?;
         return Some(first_line.to_string());
     }
     None
@@ -531,7 +536,9 @@ pub fn read_git_remotes_info(root: &std::path::Path) -> (String, String) {
 }
 
 /// Consulta de forma síncrona/ligera metadatos de GitHub PR si `gh` está disponible.
-pub fn try_query_github_pr(root: &std::path::Path) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
+pub fn try_query_github_pr(
+    root: &std::path::Path,
+) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
     let output = std::process::Command::new("gh")
         .current_dir(root)
         .args([
@@ -560,7 +567,13 @@ pub fn try_query_github_pr(root: &std::path::Path) -> Option<(u32, String, (usiz
     let pr: GhPr = serde_json::from_slice(&output.stdout).ok()?;
     let approved = pr.review_decision.as_deref() == Some("APPROVED");
     let stack = vec![pr.number.saturating_sub(1), pr.number, pr.number + 1];
-    Some((pr.number, pr.title, (pr.additions, pr.deletions), approved, stack))
+    Some((
+        pr.number,
+        pr.title,
+        (pr.additions, pr.deletions),
+        approved,
+        stack,
+    ))
 }
 
 /// Construye un snapshot vivo y dinámico a partir de la inspección de metadatos locales y GitHub.
@@ -584,11 +597,15 @@ pub fn build_live_git_flow_snapshot(
     let recent_commits = read_git_recent_commits(root, 2);
     let committed_files = read_git_last_commit_files(root);
     let working_files = read_git_working_tree_files(root);
-    let pr_data = try_query_github_pr(root).map(|(num, title, _, approved, _)| (num, title, approved));
+    let pr_data =
+        try_query_github_pr(root).map(|(num, title, _, approved, _)| (num, title, approved));
 
     let active_session = Some(super::git_flow::WorktreeSessionFlow {
         workspace_id: String::new(),
-        workspace_name: root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "workspace".to_string()),
+        workspace_name: root
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "workspace".to_string()),
         branch: active_branch.clone(),
         is_focused: true,
         agent_name: Some("pi".to_string()),
@@ -600,7 +617,10 @@ pub fn build_live_git_flow_snapshot(
     });
 
     // 01 COMMIT
-    let commit_msg = recent_commits.first().map(|(_, msg)| msg.clone()).unwrap_or_else(|| "feat: commit actual".to_string());
+    let commit_msg = recent_commits
+        .first()
+        .map(|(_, msg)| msg.clone())
+        .unwrap_or_else(|| "feat: commit actual".to_string());
     steps.push(super::git_flow::GitFlowStep::Commit {
         hash: current_sha,
         branch: active_branch.clone(),
@@ -634,7 +654,12 @@ pub fn build_live_git_flow_snapshot(
 
     // Operación en progreso especial si la hay
     let active_alert = match detect_in_progress_git_op(root) {
-        Some(InProgressGitOp::Rebase { step, total, onto_commit, has_conflict }) => {
+        Some(InProgressGitOp::Rebase {
+            step,
+            total,
+            onto_commit,
+            has_conflict,
+        }) => {
             steps.push(super::git_flow::GitFlowStep::Rebase {
                 in_progress: true,
                 step,
@@ -734,4 +759,3 @@ mod tests {
         assert_eq!(clean_file_basename("report.md"), "report.md");
     }
 }
-

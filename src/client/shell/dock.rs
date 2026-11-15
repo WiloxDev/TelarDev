@@ -701,7 +701,8 @@ impl GitFlowTab {
         self.cached_root = Some(root.to_path_buf());
         self.last_branch = branch.map(|s| s.to_string());
         self.ahead_behind = ahead_behind;
-        let mut snapshot = super::telemetry::build_live_git_flow_snapshot(root, branch, ahead_behind);
+        let mut snapshot =
+            super::telemetry::build_live_git_flow_snapshot(root, branch, ahead_behind);
 
         // Poblar sesiones hermanas desde siblings
         let mut sibling_flows = Vec::new();
@@ -731,7 +732,8 @@ impl GitFlowTab {
             all_sessions.push(active.clone());
         }
         all_sessions.extend(sibling_flows.clone());
-        snapshot.cross_session_conflicts = super::git_flow::detect_cross_session_conflicts(&all_sessions);
+        snapshot.cross_session_conflicts =
+            super::git_flow::detect_cross_session_conflicts(&all_sessions);
         snapshot.sibling_sessions = sibling_flows;
 
         self.canvas = snapshot;
@@ -892,7 +894,10 @@ impl RightDockState {
                                 }
                                 Err(_) => {
                                     if collected.is_empty() {
-                                        collected.push("[Error: Archivo binario o codificación no soportada]".into());
+                                        collected.push(
+                                            "[Error: Archivo binario o codificación no soportada]"
+                                                .into(),
+                                        );
                                     }
                                     break;
                                 }
@@ -979,13 +984,23 @@ pub(super) fn render_right_dock(
             }
 
             if area.height > 0 {
-                buffer.set_string(icon_x, area.y, "«", Style::default().fg(config.palette.subtext0));
+                buffer.set_string(
+                    icon_x,
+                    area.y,
+                    "«",
+                    Style::default().fg(config.palette.subtext0),
+                );
                 hits.right_dock_header_toggle = Rect::new(icon_x, area.y, 1, 1);
             }
 
             if area.height > 1 {
                 let toggle_y = area.bottom().saturating_sub(1);
-                buffer.set_string(icon_x, toggle_y, "«", Style::default().fg(config.palette.subtext0));
+                buffer.set_string(
+                    icon_x,
+                    toggle_y,
+                    "«",
+                    Style::default().fg(config.palette.subtext0),
+                );
                 hits.right_dock_toggle = Rect::new(icon_x, toggle_y, 1, 1);
             }
         }
@@ -1004,13 +1019,13 @@ pub(super) fn render_right_dock(
         .fg(tab_text_color)
         .bg(config.palette.accent)
         .add_modifier(ratatui::style::Modifier::BOLD);
-    let inactive_style = Style::default()
-        .fg(config.palette.subtext0)
-        .bg(if config.palette.sidebar_bg == ratatui::style::Color::Reset {
+    let inactive_style = Style::default().fg(config.palette.subtext0).bg(
+        if config.palette.sidebar_bg == ratatui::style::Color::Reset {
             config.palette.surface0
         } else {
             config.palette.sidebar_bg
-        });
+        },
+    );
 
     let status_style = if dock_state.active_tab == DockTabId::Status {
         active_style
@@ -1119,7 +1134,9 @@ pub(super) fn render_right_dock(
     if dock_state.layout_mode == DockLayoutMode::SplitVertical && available_rows >= 14 {
         let half_rows = available_rows / 2;
         if let Some(ctx) = context {
-            dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+            dock_state
+                .status_tab
+                .refresh_if_needed(ctx.root_path, ctx.branch);
             dock_state.status_tab.sync_agent_telemetry(ctx.agent_tokens);
         }
         render_status_content(
@@ -1160,7 +1177,9 @@ pub(super) fn render_right_dock(
         match dock_state.active_tab {
             DockTabId::Status => {
                 if let Some(ctx) = context {
-                    dock_state.status_tab.refresh_if_needed(ctx.root_path, ctx.branch);
+                    dock_state
+                        .status_tab
+                        .refresh_if_needed(ctx.root_path, ctx.branch);
                     dock_state.status_tab.sync_agent_telemetry(ctx.agent_tokens);
                 }
                 render_status_content(
@@ -1216,7 +1235,12 @@ pub(super) fn render_right_dock(
     let toggle_x = area.right().saturating_sub(2);
     let toggle_y = area.bottom().saturating_sub(1);
     if area.width > 1 && area.height > 0 {
-        buffer.set_string(toggle_x, toggle_y, "»", Style::default().fg(config.palette.subtext0));
+        buffer.set_string(
+            toggle_x,
+            toggle_y,
+            "»",
+            Style::default().fg(config.palette.subtext0),
+        );
         hits.right_dock_toggle = Rect::new(toggle_x, toggle_y, 1, 1);
     }
 
@@ -1334,20 +1358,19 @@ fn render_status_content(
         let ws_style = Style::default().fg(config.palette.accent);
         let preview_tag = if is_preview { " [Preview]" } else { "" };
         let ws_disp = format!("● {ws_name}{preview_tag}");
-        buffer.set_stringn(
-            x + 1,
-            cur_y,
-            ws_disp,
-            rail_w as usize,
-            ws_style,
-        );
+        buffer.set_stringn(x + 1, cur_y, ws_disp, rail_w as usize, ws_style);
         cur_y += 1;
     }
 
     // 1. SECCIÓN: TODOS (Sección 1)
     if cur_y < bottom_limit {
         let is_col = status_tab.is_collapsed(1);
-        let done_count = status_tab.telemetry.todos.iter().filter(|t| t.is_done).count();
+        let done_count = status_tab
+            .telemetry
+            .todos
+            .iter()
+            .filter(|t| t.is_done)
+            .count();
         let total_count = status_tab.telemetry.todos.len();
         let count_tag = if total_count == 0 {
             "no todos".to_string()
@@ -1452,9 +1475,7 @@ fn render_status_content(
         cur_y += 1;
 
         if !is_col {
-            let agent_disp = context
-                .and_then(|c| c.agent_name)
-                .unwrap_or("pi");
+            let agent_disp = context.and_then(|c| c.agent_name).unwrap_or("pi");
 
             if agent_st == "working" {
                 if cur_y < bottom_limit {
@@ -1514,10 +1535,12 @@ fn render_status_content(
         let is_col = status_tab.is_collapsed(3);
         let files_changed = status_tab.telemetry.git.agent_files_changed;
         let ahead_behind = context.and_then(|c| c.git_ahead_behind);
-        
+
         let changes_tag = if branch_name != "unavailable" {
             let ab_str = match ahead_behind {
-                Some((ahead, behind)) if ahead > 0 && behind > 0 => format!(" · ↑{ahead} ↓{behind}"),
+                Some((ahead, behind)) if ahead > 0 && behind > 0 => {
+                    format!(" · ↑{ahead} ↓{behind}")
+                }
                 Some((ahead, 0)) if ahead > 0 => format!(" · ↑{ahead}"),
                 Some((0, behind)) if behind > 0 => format!(" · ↓{behind}"),
                 _ => String::new(),
@@ -1577,7 +1600,10 @@ fn render_status_content(
                         Style::default().fg(config.palette.overlay0),
                     );
                 } else {
-                    let diff_str = format!("+{} lines · {} files", status_tab.telemetry.git.agent_lines_added, files_changed);
+                    let diff_str = format!(
+                        "+{} lines · {} files",
+                        status_tab.telemetry.git.agent_lines_added, files_changed
+                    );
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
@@ -1710,7 +1736,11 @@ fn render_status_content(
 
                 // cache (sólo si fue reportado > 0)
                 if stats.cache_read_tokens > 0 && cur_y < bottom_limit {
-                    let cache_str = format!("{}% hit · {}k read", stats.cache_hit_percent, stats.cache_read_tokens / 1000);
+                    let cache_str = format!(
+                        "{}% hit · {}k read",
+                        stats.cache_hit_percent,
+                        stats.cache_read_tokens / 1000
+                    );
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
@@ -1729,7 +1759,10 @@ fn render_status_content(
                 // tools (sólo si hubo calls reportadas)
                 if stats.tool_calls > 0 && cur_y < bottom_limit {
                     let tools_str = if stats.tool_failures > 0 {
-                        format!("{} calls · {} failed", stats.tool_calls, stats.tool_failures)
+                        format!(
+                            "{} calls · {} failed",
+                            stats.tool_calls, stats.tool_failures
+                        )
                     } else {
                         format!("{} calls", stats.tool_calls)
                     };
@@ -1755,7 +1788,12 @@ fn render_status_content(
 
                 // agents / subagents (sólo si hubo subagents ejecutados)
                 if stats.subagent_runs > 0 && cur_y < bottom_limit {
-                    let ag_str = format!("{} runs · {}k · ${:.3} sub", stats.subagent_runs, stats.subagent_tokens / 1000, stats.subagent_cost);
+                    let ag_str = format!(
+                        "{} runs · {}k · ${:.3} sub",
+                        stats.subagent_runs,
+                        stats.subagent_tokens / 1000,
+                        stats.subagent_cost
+                    );
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
@@ -1773,7 +1811,12 @@ fn render_status_content(
 
                 // model breakdown
                 if cur_y < bottom_limit && !stats.model_name.is_empty() {
-                    let mod_desc = format!("{} turns · {}k · ${:.3} sub", stats.model_turns, stats.model_tokens / 1000, stats.model_cost);
+                    let mod_desc = format!(
+                        "{} turns · {}k · ${:.3} sub",
+                        stats.model_turns,
+                        stats.model_tokens / 1000,
+                        stats.model_cost
+                    );
                     render_panel_kv_rail(
                         buffer,
                         x + 2,
@@ -1821,11 +1864,18 @@ fn render_status_content(
 
         if !is_col {
             let has_profile = !status_tab.telemetry.model_name.is_empty();
-            let has_engram = status_tab.telemetry.engram.is_online || status_tab.telemetry.engram.observations_count > 0;
+            let has_engram = status_tab.telemetry.engram.is_online
+                || status_tab.telemetry.engram.observations_count > 0;
 
             if has_profile && cur_y < bottom_limit {
                 let profile_str = format!("Agent profile: {}", status_tab.telemetry.model_name);
-                buffer.set_stringn(x + 2, cur_y, profile_str, rail_w.saturating_sub(2) as usize, val_dim);
+                buffer.set_stringn(
+                    x + 2,
+                    cur_y,
+                    profile_str,
+                    rail_w.saturating_sub(2) as usize,
+                    val_dim,
+                );
                 cur_y += 1;
             }
 
@@ -2083,7 +2133,13 @@ fn render_git_flow_content(
     let title_style = Style::default()
         .fg(config.palette.blue)
         .add_modifier(ratatui::style::Modifier::BOLD);
-    buffer.set_stringn(x + 1, y, title, actual_w.saturating_sub(2) as usize, title_style);
+    buffer.set_stringn(
+        x + 1,
+        y,
+        title,
+        actual_w.saturating_sub(2) as usize,
+        title_style,
+    );
 
     let top_y = y + 1;
     if top_y >= bottom_limit {
@@ -2092,9 +2148,19 @@ fn render_git_flow_content(
 
     // TOP indicator
     let base_br = &git_flow_tab.canvas.base_branch;
-    buffer.set_string(x + 1, top_y, &format!("TOP (Base {base_br})"), Style::default().fg(config.palette.overlay0));
+    buffer.set_string(
+        x + 1,
+        top_y,
+        &format!("TOP (Base {base_br})"),
+        Style::default().fg(config.palette.overlay0),
+    );
     if actual_w > 8 {
-        buffer.set_string(x + actual_w.saturating_sub(6), top_y, "▲ OOT", Style::default().fg(config.palette.blue));
+        buffer.set_string(
+            x + actual_w.saturating_sub(6),
+            top_y,
+            "▲ OOT",
+            Style::default().fg(config.palette.blue),
+        );
     }
 
     // Preparar líneas visuales del riel continuo
@@ -2105,9 +2171,14 @@ fn render_git_flow_content(
         let files_str = git_flow_tab.canvas.cross_session_conflicts.join(", ");
         visual_lines.push((
             format!("⚠️ ALERTA: Conflicto en caliente ({files_str})"),
-            Style::default().fg(config.palette.red).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(config.palette.red)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ));
-        visual_lines.push(("             │".to_string(), Style::default().fg(config.palette.red)));
+        visual_lines.push((
+            "             │".to_string(),
+            Style::default().fg(config.palette.red),
+        ));
     }
 
     // 1. Render de la Sesión Activa Enfocada (Detalle completo: Commits + Sección en Trabajo)
@@ -2117,11 +2188,15 @@ fn render_git_flow_content(
 
         visual_lines.push((
             format!("├───╮ 🌲 WORKTREE [{branch_name}]"),
-            Style::default().fg(config.palette.peach).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(config.palette.peach)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ));
         visual_lines.push((
             format!("│   ├─▶ [SESIÓN ACTIVA: {agent_label}]"),
-            Style::default().fg(config.palette.blue).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(config.palette.blue)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ));
 
         // Commits guardados recientes
@@ -2139,7 +2214,13 @@ fn render_git_flow_content(
 
         // Archivos congelados en commit anterior
         if !active_sess.committed_files.is_empty() {
-            let cf_str = active_sess.committed_files.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let cf_str = active_sess
+                .committed_files
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             visual_lines.push((
                 format!("│       └─📂 {cf_str}"),
                 Style::default().fg(config.palette.overlay0),
@@ -2148,11 +2229,19 @@ fn render_git_flow_content(
 
         // Sección EN TRABAJO EN VIVO (archivos modificados ahora mismo)
         if !active_sess.working_files.is_empty() {
-            let wf_str = active_sess.working_files.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let wf_str = active_sess
+                .working_files
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             let count = active_sess.working_files.len();
             visual_lines.push((
                 format!("│   ⚡ [EN TRABAJO VIVO] ({count} mod)"),
-                Style::default().fg(config.palette.peach).add_modifier(ratatui::style::Modifier::BOLD),
+                Style::default()
+                    .fg(config.palette.peach)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
             ));
             visual_lines.push((
                 format!("│       └─✏️ {wf_str}"),
@@ -2174,7 +2263,10 @@ fn render_git_flow_content(
             ));
         }
 
-        visual_lines.push(("│   │".to_string(), Style::default().fg(config.palette.overlay0)));
+        visual_lines.push((
+            "│   │".to_string(),
+            Style::default().fg(config.palette.overlay0),
+        ));
     }
 
     // 2. Render de Sesiones Secundarias / Worktrees Hermanos (Doble Carril en Paralelo)
@@ -2189,7 +2281,9 @@ fn render_git_flow_content(
 
         visual_lines.push((
             format!("├───┬─▶ [SESIÓN HERMANA: {agent_label}] {st_icon}"),
-            Style::default().fg(config.palette.teal).add_modifier(ratatui::style::Modifier::BOLD),
+            Style::default()
+                .fg(config.palette.teal)
+                .add_modifier(ratatui::style::Modifier::BOLD),
         ));
         visual_lines.push((
             format!("│   │   Rama: {branch_name}"),
@@ -2197,13 +2291,22 @@ fn render_git_flow_content(
         ));
 
         if !sibling.working_files.is_empty() {
-            let files = sibling.working_files.iter().take(2).cloned().collect::<Vec<_>>().join(", ");
+            let files = sibling
+                .working_files
+                .iter()
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             visual_lines.push((
                 format!("│   │   ⚡ Editando: {files}"),
                 Style::default().fg(config.palette.peach),
             ));
         }
-        visual_lines.push(("│   │".to_string(), Style::default().fg(config.palette.overlay0)));
+        visual_lines.push((
+            "│   │".to_string(),
+            Style::default().fg(config.palette.overlay0),
+        ));
     }
 
     // 3. Retorno proyectado hacia main
@@ -2211,27 +2314,54 @@ fn render_git_flow_content(
         format!("├───◀─── Retorno proyectado hacia {base_br} (git merge)"),
         Style::default().fg(config.palette.overlay0),
     ));
-    visual_lines.push(("│".to_string(), Style::default().fg(config.palette.overlay0)));
+    visual_lines.push((
+        "│".to_string(),
+        Style::default().fg(config.palette.overlay0),
+    ));
 
     // Viewport de renderizado
     let viewport_y = top_y + 1;
     let available_content_rows = bottom_limit.saturating_sub(viewport_y + 1) as usize;
-    let offset = git_flow_tab.canvas.scroll_offset.min(visual_lines.len().saturating_sub(1));
+    let offset = git_flow_tab
+        .canvas
+        .scroll_offset
+        .min(visual_lines.len().saturating_sub(1));
 
-    for (idx, (line, style)) in visual_lines.iter().skip(offset).take(available_content_rows).enumerate() {
+    for (idx, (line, style)) in visual_lines
+        .iter()
+        .skip(offset)
+        .take(available_content_rows)
+        .enumerate()
+    {
         let line_y = viewport_y + idx as u16;
         if line_y >= bottom_limit.saturating_sub(1) {
             break;
         }
-        buffer.set_stringn(x + 1, line_y, line, actual_w.saturating_sub(2) as usize, *style);
+        buffer.set_stringn(
+            x + 1,
+            line_y,
+            line,
+            actual_w.saturating_sub(2) as usize,
+            *style,
+        );
     }
 
     // BOTTOM indicator y scroll thumb
     let bottom_row = bottom_limit.saturating_sub(1);
     if bottom_row > viewport_y {
-        buffer.set_string(x + 1, bottom_row, "BOTTOM", Style::default().fg(config.palette.overlay0));
+        buffer.set_string(
+            x + 1,
+            bottom_row,
+            "BOTTOM",
+            Style::default().fg(config.palette.overlay0),
+        );
         if actual_w > 4 {
-            buffer.set_string(x + actual_w.saturating_sub(2), bottom_row, "▼", Style::default().fg(config.palette.blue));
+            buffer.set_string(
+                x + actual_w.saturating_sub(2),
+                bottom_row,
+                "▼",
+                Style::default().fg(config.palette.blue),
+            );
         }
     }
 
@@ -2242,7 +2372,8 @@ fn render_git_flow_content(
         let thumb_y = viewport_y + progress as u16;
         if thumb_y < bottom_row {
             if let Some(cell) = buffer.cell_mut((thumb_col, thumb_y)) {
-                cell.set_symbol("█").set_style(Style::default().fg(config.palette.overlay1));
+                cell.set_symbol("█")
+                    .set_style(Style::default().fg(config.palette.overlay1));
             }
         }
     }
@@ -2634,27 +2765,23 @@ mod tests {
         // Estado de workspace A debe haber sido restaurado íntegramente
         assert_eq!(dock.files_tab.selected_index, 4);
         assert_eq!(dock.files_tab.scroll_offset, 2);
-        assert!(
-            dock.files_tab
-                .expanded_dirs
-                .contains(&PathBuf::from("src/client"))
-        );
-        assert!(
-            !dock
-                .files_tab
-                .expanded_dirs
-                .contains(&PathBuf::from("docs"))
-        );
+        assert!(dock
+            .files_tab
+            .expanded_dirs
+            .contains(&PathBuf::from("src/client")));
+        assert!(!dock
+            .files_tab
+            .expanded_dirs
+            .contains(&PathBuf::from("docs")));
 
         // Conmutamos de nuevo a workspace B
         dock.sync_workspace("ws-B");
         assert_eq!(dock.last_workspace_id.as_deref(), Some("ws-B"));
         assert_eq!(dock.files_tab.selected_index, 1);
-        assert!(
-            dock.files_tab
-                .expanded_dirs
-                .contains(&PathBuf::from("docs"))
-        );
+        assert!(dock
+            .files_tab
+            .expanded_dirs
+            .contains(&PathBuf::from("docs")));
     }
 
     #[test]
@@ -2983,7 +3110,11 @@ mod tests {
             &mut outcome,
         );
         assert_eq!(state.right_dock_state.active_tab, DockTabId::Files);
-        assert_eq!(state.mode, ClientShellMode::Terminal, "Mouse tab click must preserve Terminal mode");
+        assert_eq!(
+            state.mode,
+            ClientShellMode::Terminal,
+            "Mouse tab click must preserve Terminal mode"
+        );
 
         // Click on Section Toggle
         state.handle_mouse(
@@ -2995,7 +3126,11 @@ mod tests {
             },
             &mut outcome,
         );
-        assert_eq!(state.mode, ClientShellMode::Terminal, "Section accordion toggle must preserve Terminal mode");
+        assert_eq!(
+            state.mode,
+            ClientShellMode::Terminal,
+            "Section accordion toggle must preserve Terminal mode"
+        );
 
         // Click on Background
         state.handle_mouse(
@@ -3007,7 +3142,11 @@ mod tests {
             },
             &mut outcome,
         );
-        assert_eq!(state.mode, ClientShellMode::Terminal, "Dock background click must preserve Terminal mode");
+        assert_eq!(
+            state.mode,
+            ClientShellMode::Terminal,
+            "Dock background click must preserve Terminal mode"
+        );
 
         // Verify mode bar returns None for Terminal and RightDock modes
         let mut buffer = Buffer::empty(Rect::new(0, 0, 100, 30));
@@ -3023,7 +3162,10 @@ mod tests {
             &state.config.keybinds,
             &palette,
         );
-        assert_eq!(terminal_footer, None, "Terminal mode must have no footer bar");
+        assert_eq!(
+            terminal_footer, None,
+            "Terminal mode must have no footer bar"
+        );
 
         let dock_footer = render::render_mode_bar(
             &mut buffer,
@@ -3035,7 +3177,10 @@ mod tests {
             &state.config.keybinds,
             &palette,
         );
-        assert_eq!(dock_footer, None, "RightDock mode must never render intrusive footer bar across terminal");
+        assert_eq!(
+            dock_footer, None,
+            "RightDock mode must never render intrusive footer bar across terminal"
+        );
     }
 
     #[test]
@@ -3062,7 +3207,10 @@ mod tests {
             ("elapsed".to_string(), "2m 15s".to_string()),
             ("engram_obs".to_string(), "42".to_string()),
             ("todo_1".to_string(), "done:Preparar entorno".to_string()),
-            ("todo_2".to_string(), "prog:Implementar sincronización".to_string()),
+            (
+                "todo_2".to_string(),
+                "prog:Implementar sincronización".to_string(),
+            ),
             ("todo_3".to_string(), "open:Verificar tests".to_string()),
         ];
 
@@ -3082,7 +3230,10 @@ mod tests {
         assert!(status.telemetry.todos[0].is_done);
         assert!(!status.telemetry.todos[0].is_in_progress);
 
-        assert_eq!(status.telemetry.todos[1].title, "Implementar sincronización");
+        assert_eq!(
+            status.telemetry.todos[1].title,
+            "Implementar sincronización"
+        );
         assert!(!status.telemetry.todos[1].is_done);
         assert!(status.telemetry.todos[1].is_in_progress);
 
@@ -3152,8 +3303,14 @@ mod tests {
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         assert!(text.contains("AGENTS"), "Must contain AGENTS header");
         assert!(text.contains("blocked"), "Must display blocked tag");
-        assert!(text.contains("gentle-ai"), "Must display agent name gentle-ai");
-        assert!(text.contains("▲"), "Must display warning triangle for blocked agent");
+        assert!(
+            text.contains("gentle-ai"),
+            "Must display agent name gentle-ai"
+        );
+        assert!(
+            text.contains("▲"),
+            "Must display warning triangle for blocked agent"
+        );
     }
 
     #[test]
@@ -3180,7 +3337,14 @@ mod tests {
             siblings: Vec::new(),
         };
 
-        render_right_dock(&mut buffer, area, &config, &mut dock, Some(&context), &mut hits);
+        render_right_dock(
+            &mut buffer,
+            area,
+            &config,
+            &mut dock,
+            Some(&context),
+            &mut hits,
+        );
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
 
         assert!(text.contains("GIT FLOW & WORKTREE MAP (LIVE)"));
@@ -3300,7 +3464,9 @@ mod tests {
 
     #[test]
     fn test_dock_files_w_key_creates_workspace_for_selected_directory() {
-        use crate::client::shell::state::{ClientShellAction, ClientShellInput, ClientShellMode, ClientShellState};
+        use crate::client::shell::state::{
+            ClientShellAction, ClientShellInput, ClientShellMode, ClientShellState,
+        };
         use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
         let root = TreeFixture::new();
@@ -3399,7 +3565,10 @@ mod tests {
 
         assert_eq!(expanded_hits.right_dock_toggle, Rect::new(98, 19, 1, 1));
         assert_eq!(expanded_buffer[(98, 19)].symbol(), "»");
-        assert_eq!(expanded_hits.right_dock_header_toggle, Rect::new(96, 0, 3, 1));
+        assert_eq!(
+            expanded_hits.right_dock_header_toggle,
+            Rect::new(96, 0, 3, 1)
+        );
         assert_eq!(expanded_buffer[(96, 0)].symbol(), "[");
         assert_eq!(expanded_buffer[(97, 0)].symbol(), "»");
         assert_eq!(expanded_buffer[(98, 0)].symbol(), "]");

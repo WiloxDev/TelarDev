@@ -29,7 +29,10 @@ impl fmt::Display for ProxyConfigError {
         match self {
             Self::InvalidHost(host) => write!(f, "invalid proxy host: {host}"),
             Self::NonLoopbackHost(host) => {
-                write!(f, "security violation: proxy host must be loopback, got: {host}")
+                write!(
+                    f,
+                    "security violation: proxy host must be loopback, got: {host}"
+                )
             }
             Self::InvalidPort(port) => write!(f, "invalid proxy port: {port}"),
         }
@@ -70,7 +73,9 @@ impl ProxyConfig {
     pub fn validate(&self) -> Result<(), ProxyConfigError> {
         let trimmed = self.host.trim();
         if trimmed.is_empty() {
-            return Err(ProxyConfigError::InvalidHost("empty host string".to_string()));
+            return Err(ProxyConfigError::InvalidHost(
+                "empty host string".to_string(),
+            ));
         }
 
         if trimmed == "localhost" {

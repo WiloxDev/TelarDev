@@ -20,7 +20,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "GeistMono Nerd Font",
         style_tags: &["swiss", "minimalist", "geometric", "clean"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/GeistMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/GeistMono.tar.xz",
     },
     FontProfile {
         id: "iosevka",
@@ -28,7 +29,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "Iosevka Nerd Font",
         style_tags: &["condensed", "ultra-slender", "space-efficient"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Iosevka.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Iosevka.tar.xz",
     },
     FontProfile {
         id: "jetbrains-mono",
@@ -36,7 +38,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "JetBrainsMono Nerd Font",
         style_tags: &["modern", "high-legibility", "8deg-cut"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz",
     },
     FontProfile {
         id: "commit-mono",
@@ -44,7 +47,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "CommitMono Nerd Font",
         style_tags: &["neutral", "swiss", "anonymous", "clean"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CommitMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CommitMono.tar.xz",
     },
     FontProfile {
         id: "cascadia-code",
@@ -52,7 +56,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "CaskaydiaCove Nerd Font",
         style_tags: &["humanist", "balanced", "friendly"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.tar.xz",
     },
     FontProfile {
         id: "monaspace-argon",
@@ -60,7 +65,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "MonaspaceArgon Nerd Font",
         style_tags: &["texture-healing", "humanist", "innovative"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Monaspace.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Monaspace.tar.xz",
     },
     FontProfile {
         id: "monaspace-krypton",
@@ -68,7 +74,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "MonaspaceKrypton Nerd Font",
         style_tags: &["mechanical", "technical", "futuristic"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Monaspace.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Monaspace.tar.xz",
     },
     FontProfile {
         id: "victor-mono",
@@ -76,7 +83,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "VictorMono Nerd Font",
         style_tags: &["slender", "cursive-italics", "distinctive"],
         license: "MIT",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/VictorMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/VictorMono.tar.xz",
     },
     FontProfile {
         id: "ibm-plex-mono",
@@ -84,7 +92,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "IBMPlexMono Nerd Font",
         style_tags: &["industrial", "engineered", "neo-grotesque"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/IBMPlexMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/IBMPlexMono.tar.xz",
     },
     FontProfile {
         id: "intel-one-mono",
@@ -92,7 +101,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "IntelOneMono Nerd Font",
         style_tags: &["ergonomic", "low-fatigue", "readable"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/IntelOneMono.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/IntelOneMono.tar.xz",
     },
     FontProfile {
         id: "fira-code",
@@ -100,7 +110,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "FiraCode Nerd Font",
         style_tags: &["technical-ligatures", "classic", "crisp"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.tar.xz",
     },
     FontProfile {
         id: "source-code-pro",
@@ -108,7 +119,8 @@ pub const FONT_CATALOG: &[FontProfile] = &[
         nerd_font_family: "SauceCodePro Nerd Font",
         style_tags: &["adobe", "wide-aperture", "compact-clear"],
         license: "SIL OFL 1.1",
-        download_url: "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/SourceCodePro.tar.xz",
+        download_url:
+            "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/SourceCodePro.tar.xz",
     },
 ];
 
@@ -151,7 +163,9 @@ impl HostTerminalKind {
 
 /// Detects the host terminal emulator based on environment variables.
 pub fn detect_host_terminal_from_env() -> HostTerminalKind {
-    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default().to_lowercase();
+    let term_program = std::env::var("TERM_PROGRAM")
+        .unwrap_or_default()
+        .to_lowercase();
     let term = std::env::var("TERM").unwrap_or_default().to_lowercase();
 
     if std::env::var("GHOSTTY_RESOURCES_DIR").is_ok()
@@ -160,7 +174,10 @@ pub fn detect_host_terminal_from_env() -> HostTerminalKind {
     {
         return HostTerminalKind::Ghostty;
     }
-    if std::env::var("KITTY_PID").is_ok() || term_program.contains("kitty") || term.contains("kitty") {
+    if std::env::var("KITTY_PID").is_ok()
+        || term_program.contains("kitty")
+        || term.contains("kitty")
+    {
         return HostTerminalKind::Kitty;
     }
     if std::env::var("WEZTERM_PANE").is_ok()
@@ -213,21 +230,31 @@ mod tests {
 
     #[test]
     fn font_catalog_has_at_least_twelve_fonts() {
-        assert!(FONT_CATALOG.len() >= 12, "catalog must contain at least 12 fonts");
+        assert!(
+            FONT_CATALOG.len() >= 12,
+            "catalog must contain at least 12 fonts"
+        );
     }
 
     #[test]
     fn font_profiles_have_valid_identifiers_and_nerd_font_families() {
         for font in FONT_CATALOG {
             assert!(!font.id.is_empty(), "id must not be empty");
-            assert!(!font.display_name.is_empty(), "display_name must not be empty");
+            assert!(
+                !font.display_name.is_empty(),
+                "display_name must not be empty"
+            );
             assert!(
                 font.nerd_font_family.ends_with("Nerd Font"),
                 "font '{}' family '{}' must end with 'Nerd Font' to protect Seti UI icons",
                 font.id,
                 font.nerd_font_family
             );
-            assert!(!font.style_tags.is_empty(), "font '{}' must have style tags", font.id);
+            assert!(
+                !font.style_tags.is_empty(),
+                "font '{}' must have style tags",
+                font.id
+            );
             assert!(
                 font.download_url.starts_with("https://"),
                 "download_url must be https: {}",

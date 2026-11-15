@@ -822,7 +822,8 @@ impl ClientShellState {
                         outcome.repaint = true;
                     }
                     KeyCode::Char('s') | KeyCode::Char('S') => {
-                        self.right_dock_state.layout_mode = self.right_dock_state.layout_mode.toggle();
+                        self.right_dock_state.layout_mode =
+                            self.right_dock_state.layout_mode.toggle();
                         outcome.repaint = true;
                     }
                     KeyCode::Char('g') | KeyCode::Char('G') => {
@@ -835,7 +836,9 @@ impl ClientShellState {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.select_next();
                             outcome.repaint = true;
-                        } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                        } else if self.right_dock_state.active_tab
+                            == super::dock::DockTabId::GitFlow
+                        {
                             self.right_dock_state.git_flow_tab.canvas.scroll_down(30);
                             outcome.repaint = true;
                         }
@@ -844,7 +847,9 @@ impl ClientShellState {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
                             self.right_dock_state.files_tab.select_prev();
                             outcome.repaint = true;
-                        } else if self.right_dock_state.active_tab == super::dock::DockTabId::GitFlow {
+                        } else if self.right_dock_state.active_tab
+                            == super::dock::DockTabId::GitFlow
+                        {
                             self.right_dock_state.git_flow_tab.canvas.scroll_up();
                             outcome.repaint = true;
                         }
@@ -869,7 +874,9 @@ impl ClientShellState {
                     }
                     KeyCode::Char('w') | KeyCode::Char('W') => {
                         if self.right_dock_state.active_tab == super::dock::DockTabId::Files {
-                            if let Some((dir_path, dir_name)) = self.right_dock_state.files_tab.selected_dir_path() {
+                            if let Some((dir_path, dir_name)) =
+                                self.right_dock_state.files_tab.selected_dir_path()
+                            {
                                 self.push_endpoint_method(
                                     crate::api::schema::Method::WorkspaceCreate(
                                         crate::api::schema::WorkspaceCreateParams {

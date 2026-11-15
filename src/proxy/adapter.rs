@@ -126,17 +126,23 @@ impl ProxyLifecyclePort for CLIProxyAdapter {
         let pid = child.id();
 
         let host_ip: IpAddr = if config.host == "localhost" {
-            "127.0.0.1".parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+            "127.0.0.1"
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
         } else {
-            config.host.parse().map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+            config
+                .host
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
         };
         let endpoint = SocketAddr::new(host_ip, config.port);
 
         // Store active child handle
         {
-            let mut guard = self.active_child.lock().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned")
-            })?;
+            let mut guard = self
+                .active_child
+                .lock()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned"))?;
             *guard = Some(child);
         }
 
@@ -180,9 +186,10 @@ impl ProxyLifecyclePort for CLIProxyAdapter {
     }
 
     fn stop(&self, _handle: &ProxyHandle) -> io::Result<()> {
-        let mut guard = self.active_child.lock().map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned")
-        })?;
+        let mut guard = self
+            .active_child
+            .lock()
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned"))?;
 
         if let Some(mut child) = guard.take() {
             #[cfg(unix)]

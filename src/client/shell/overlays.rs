@@ -1430,7 +1430,11 @@ fn render_network_project_picker_overlay(
                 b.set_style(row_rect, Style::default().bg(p.surface0));
             }
 
-            let bullet = if is_selected { " ▶ 📁 " } else { "   📁 " };
+            let bullet = if is_selected {
+                " ▶ 📁 "
+            } else {
+                "   📁 "
+            };
             let bullet_style = if is_selected {
                 Style::default().fg(p.accent).bg(p.surface0)
             } else {

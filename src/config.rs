@@ -24,8 +24,9 @@ pub use self::{
     },
     model::{
         validated_sidebar_bounds, AgentPanelSortConfig, Config, ConfigReloadReport,
-        ConfigReloadStatus, CpamcExperienceConfig, HostCursorModeConfig, NewTerminalCwdConfig, PaneBordersConfig,
-        ShellModeConfig, SidebarCollapsedModeConfig, RightDockCollapsedModeConfig, StatusIndicatorStyle, TabBarPositionConfig,
+        ConfigReloadStatus, CpamcExperienceConfig, HostCursorModeConfig, NewTerminalCwdConfig,
+        PaneBordersConfig, RightDockCollapsedModeConfig, ShellModeConfig,
+        SidebarCollapsedModeConfig, StatusIndicatorStyle, TabBarPositionConfig,
         ToastClipboardPosition, ToastConfig, ToastDelivery, ToastHerdrPosition,
         UpdateChannelConfig, MAX_TOAST_DELAY_SECONDS,
     },
@@ -35,18 +36,14 @@ pub use self::{
     },
     sound::SoundConfig,
     tab_bar::TabBarRightEntryConfig,
-    theme::{
-        parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig,
-    },
-    typography::{
-        detect_host_terminal_from_env, format_terminal_directive, FONT_CATALOG,
-    },
+    theme::{parse_color, CustomThemeColors, ModeThemeColors, ThemeConfig},
+    typography::{detect_host_terminal_from_env, format_terminal_directive, FONT_CATALOG},
     window_title::{WindowTitlePart, WindowTitleTemplate, WindowTitleToken},
 };
 
+pub(crate) use self::keybinds::parse_key_combo;
 #[allow(unused_imports)]
 pub use self::theme::{THEME_DISPLAY_ORDER, THEME_NAMES};
-pub(crate) use self::keybinds::parse_key_combo;
 pub(crate) use self::write::{update_file_at, write_edit, ConfigEdit};
 pub(crate) use self::{
     io::upsert_top_level_bool,

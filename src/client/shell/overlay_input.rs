@@ -232,9 +232,14 @@ impl ClientShellState {
             let p = std::path::PathBuf::from(primary_root);
             if p.is_dir() {
                 // Verificar si contiene subdirectorios reales
-                let has_subdirs = std::fs::read_dir(&p).map(|mut read| {
-                    read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
-                }).unwrap_or(false);
+                let has_subdirs = std::fs::read_dir(&p)
+                    .map(|mut read| {
+                        read.any(|res| {
+                            res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
                 if has_subdirs {
                     candidate_root = Some(p);
                     break;
@@ -250,18 +255,28 @@ impl ClientShellState {
                     return None;
                 }
                 // Si el cwd actual tiene subcarpetas, podría ser la raíz
-                let has_subdirs = std::fs::read_dir(&p).map(|mut read| {
-                    read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
-                }).unwrap_or(false);
+                let has_subdirs = std::fs::read_dir(&p)
+                    .map(|mut read| {
+                        read.any(|res| {
+                            res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
                 if has_subdirs {
                     return Some(p);
                 }
                 // Si es un subproyecto (ej: /mnt/z/wilox-pi), su padre (/mnt/z) es la raíz de proyectos
                 if let Some(parent) = p.parent() {
                     if parent.is_dir() {
-                        let parent_has_subdirs = std::fs::read_dir(parent).map(|mut read| {
-                            read.any(|res| res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false)).unwrap_or(false))
-                        }).unwrap_or(false);
+                        let parent_has_subdirs = std::fs::read_dir(parent)
+                            .map(|mut read| {
+                                read.any(|res| {
+                                    res.map(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+                                        .unwrap_or(false)
+                                })
+                            })
+                            .unwrap_or(false);
                         if parent_has_subdirs {
                             return Some(parent.to_path_buf());
                         }
@@ -271,9 +286,11 @@ impl ClientShellState {
             };
 
             if let Some(snapshot) = self.snapshot.as_deref() {
-                if let Some(focused_ws) = snapshot.focused_workspace_id.as_deref().and_then(|id| {
-                    snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
-                }) {
+                if let Some(focused_ws) = snapshot
+                    .focused_workspace_id
+                    .as_deref()
+                    .and_then(|id| snapshot.workspaces.iter().find(|ws| ws.workspace_id == id))
+                {
                     if self.config.is_network_path(&focused_ws.new_workspace_cwd) {
                         candidate_root = inspect_ws(&focused_ws.new_workspace_cwd);
                     }
@@ -292,9 +309,7 @@ impl ClientShellState {
             }
         }
 
-        let root_path = candidate_root.unwrap_or_else(|| {
-            std::path::PathBuf::from("/mnt/z")
-        });
+        let root_path = candidate_root.unwrap_or_else(|| std::path::PathBuf::from("/mnt/z"));
 
         let root_display = root_path.to_string_lossy().to_string();
 

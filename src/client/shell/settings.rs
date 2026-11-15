@@ -307,7 +307,8 @@ impl ClientShellState {
                         _ => crate::config::ConfigEdit::DockGitFlow(enabled),
                     };
                     if self.save_settings_edit(edit, outcome) {
-                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut() {
+                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut()
+                        {
                             settings.sidebar_visibility[selected] = enabled;
                         }
                     }
@@ -323,7 +324,8 @@ impl ClientShellState {
                     self.config.cpamc_experience = next_exp;
                     let edit = crate::config::ConfigEdit::CpamcExperience(next_exp);
                     if self.save_settings_edit(edit, outcome) {
-                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut() {
+                        if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_mut()
+                        {
                             settings.cpamc_experience = next_exp;
                         }
                     }
@@ -502,9 +504,9 @@ impl ClientShellState {
             if let Some(ClientShellOverlay::Settings(settings)) = self.overlay.as_ref() {
                 if settings.section == ClientSettingsSection::Typography {
                     if let Some(font) = crate::config::FONT_CATALOG.get(settings.selected) {
-                        outcome
-                            .actions
-                            .push(ClientShellAction::OpenSafeWebUrl(font.download_url.to_string()));
+                        outcome.actions.push(ClientShellAction::OpenSafeWebUrl(
+                            font.download_url.to_string(),
+                        ));
                         return true;
                     }
                 }

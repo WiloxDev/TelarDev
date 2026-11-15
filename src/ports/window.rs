@@ -121,13 +121,12 @@ mod tests {
         let port = MockWindowPort {
             open: AtomicBool::new(false),
         };
-        let handle = port.open(&WindowTarget::OAuth, "http://127.0.0.1:8317").unwrap();
+        let handle = port
+            .open(&WindowTarget::OAuth, "http://127.0.0.1:8317")
+            .unwrap();
         assert_eq!(handle.window_id, 42);
         assert!(port.is_open(&handle));
-        assert_eq!(
-            port.status(&handle),
-            WindowStatus::Open { window_id: 42 }
-        );
+        assert_eq!(port.status(&handle), WindowStatus::Open { window_id: 42 });
 
         assert!(port.close(&handle).is_ok());
         assert!(!port.is_open(&handle));

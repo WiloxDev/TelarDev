@@ -346,25 +346,38 @@ pub(super) fn render_shell(
             .map(|target| target.workspace_id.as_str())
             .is_some_and(|selected| snapshot.focused_workspace_id.as_deref() != Some(selected));
 
-        let active_ws = target_ws_id.and_then(|id| {
-            snapshot.workspaces.iter().find(|ws| ws.workspace_id == id)
-        });
+        let active_ws =
+            target_ws_id.and_then(|id| snapshot.workspaces.iter().find(|ws| ws.workspace_id == id));
         let active_pane_cwd = active_ws.and_then(|ws| {
             snapshot
                 .panes
                 .iter()
                 .find(|p| p.workspace_id == ws.workspace_id && p.focused)
-                .or_else(|| snapshot.panes.iter().find(|p| p.workspace_id == ws.workspace_id))
+                .or_else(|| {
+                    snapshot
+                        .panes
+                        .iter()
+                        .find(|p| p.workspace_id == ws.workspace_id)
+                })
                 .and_then(|p| p.foreground_cwd.as_deref().or(p.cwd.as_deref()))
         });
         let ws_context = active_ws.map(|ws| {
             let root_str = active_pane_cwd.unwrap_or(&ws.new_workspace_cwd);
-            let focused_agent = snapshot.panes.iter()
+            let focused_agent = snapshot
+                .panes
+                .iter()
                 .find(|pane| pane.workspace_id == ws.workspace_id && pane.focused)
-                .and_then(|pane| snapshot.agents.iter().find(|agent| agent.pane_id == pane.pane_id && agent.workspace_id == ws.workspace_id))
+                .and_then(|pane| {
+                    snapshot.agents.iter().find(|agent| {
+                        agent.pane_id == pane.pane_id && agent.workspace_id == ws.workspace_id
+                    })
+                })
                 .or_else(|| {
                     if is_preview {
-                        snapshot.agents.iter().find(|agent| agent.workspace_id == ws.workspace_id)
+                        snapshot
+                            .agents
+                            .iter()
+                            .find(|agent| agent.workspace_id == ws.workspace_id)
                     } else {
                         None
                     }
@@ -378,7 +391,8 @@ pub(super) fn render_shell(
             let mut siblings = Vec::new();
 
             if needs_git_siblings {
-                let current_git_dir = super::telemetry::resolve_git_dir(std::path::Path::new(root_str));
+                let current_git_dir =
+                    super::telemetry::resolve_git_dir(std::path::Path::new(root_str));
                 if let Some(ref my_git) = current_git_dir {
                     for other_ws in &snapshot.workspaces {
                         if other_ws.workspace_id == ws.workspace_id {
@@ -390,13 +404,26 @@ pub(super) fn render_shell(
                             let same_repo = my_git == &other_git
                                 || my_git.starts_with(&other_git)
                                 || other_git.starts_with(my_git)
-                                || (my_git.to_string_lossy().contains("/worktrees/") && other_git.to_string_lossy().contains("/worktrees/"));
+                                || (my_git.to_string_lossy().contains("/worktrees/")
+                                    && other_git.to_string_lossy().contains("/worktrees/"));
 
                             if same_repo {
-                                let sib_agent = snapshot.panes.iter()
+                                let sib_agent = snapshot
+                                    .panes
+                                    .iter()
                                     .find(|p| p.workspace_id == other_ws.workspace_id && p.focused)
-                                    .and_then(|p| snapshot.agents.iter().find(|a| a.pane_id == p.pane_id && a.workspace_id == other_ws.workspace_id))
-                                    .or_else(|| snapshot.agents.iter().find(|a| a.workspace_id == other_ws.workspace_id));
+                                    .and_then(|p| {
+                                        snapshot.agents.iter().find(|a| {
+                                            a.pane_id == p.pane_id
+                                                && a.workspace_id == other_ws.workspace_id
+                                        })
+                                    })
+                                    .or_else(|| {
+                                        snapshot
+                                            .agents
+                                            .iter()
+                                            .find(|a| a.workspace_id == other_ws.workspace_id)
+                                    });
 
                                 siblings.push(super::dock::SiblingWorkspaceContext {
                                     workspace_id: &other_ws.workspace_id,
@@ -404,7 +431,12 @@ pub(super) fn render_shell(
                                     root_path: other_root,
                                     branch: other_ws.branch.as_deref(),
                                     agent_status: sib_agent.map(|a| a.agent_status),
-                                    agent_name: sib_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
+                                    agent_name: sib_agent.and_then(|a| {
+                                        a.name
+                                            .as_deref()
+                                            .or(a.display_agent.as_deref())
+                                            .or(a.agent.as_deref())
+                                    }),
                                 });
                             }
                         }
@@ -419,7 +451,12 @@ pub(super) fn render_shell(
                 branch: ws.branch.as_deref(),
                 git_ahead_behind: ws.git_ahead_behind,
                 agent_status: focused_agent.map(|agent| agent.agent_status),
-                agent_name: focused_agent.and_then(|a| a.name.as_deref().or(a.display_agent.as_deref()).or(a.agent.as_deref())),
+                agent_name: focused_agent.and_then(|a| {
+                    a.name
+                        .as_deref()
+                        .or(a.display_agent.as_deref())
+                        .or(a.agent.as_deref())
+                }),
                 agent_tokens: focused_agent.map(|a| a.tokens.as_slice()),
                 is_preview,
                 siblings,

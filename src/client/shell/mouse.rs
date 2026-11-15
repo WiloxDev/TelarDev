@@ -1715,16 +1715,23 @@ impl ClientShellState {
             }
             return;
         }
-        if matches!(self.overlay, Some(ClientShellOverlay::NetworkProjectPicker(_))) {
+        if matches!(
+            self.overlay,
+            Some(ClientShellOverlay::NetworkProjectPicker(_))
+        ) {
             match mouse.kind {
                 MouseEventKind::ScrollUp => {
-                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) =
+                        self.overlay.as_mut()
+                    {
                         picker.scroll_offset = picker.scroll_offset.saturating_sub(2);
                         outcome.repaint = true;
                     }
                 }
                 MouseEventKind::ScrollDown => {
-                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                    if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) =
+                        self.overlay.as_mut()
+                    {
                         picker.scroll_offset = picker.scroll_offset.saturating_add(2);
                         outcome.repaint = true;
                     }
@@ -1737,7 +1744,9 @@ impl ClientShellState {
                         .find(|(rect, _)| super::contains(*rect, point))
                         .copied()
                     {
-                        if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) = self.overlay.as_mut() {
+                        if let Some(ClientShellOverlay::NetworkProjectPicker(picker)) =
+                            self.overlay.as_mut()
+                        {
                             picker.selected = index;
                         }
                         self.submit_network_project_picker(outcome);
@@ -2011,15 +2020,21 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
-                if let Some(tab_id) = self.hits.right_dock_tabs.iter().find_map(|(rect, id)| {
-                    super::contains(*rect, point).then_some(*id)
-                }) {
+                if let Some(tab_id) = self
+                    .hits
+                    .right_dock_tabs
+                    .iter()
+                    .find_map(|(rect, id)| super::contains(*rect, point).then_some(*id))
+                {
                     self.select_dock_tab_mouse(tab_id, outcome);
                     return;
                 }
-                if let Some(sec_id) = self.hits.right_dock_section_toggles.iter().find_map(|(rect, id)| {
-                    super::contains(*rect, point).then_some(*id)
-                }) {
+                if let Some(sec_id) = self
+                    .hits
+                    .right_dock_section_toggles
+                    .iter()
+                    .find_map(|(rect, id)| super::contains(*rect, point).then_some(*id))
+                {
                     self.right_dock_state.status_tab.toggle_section(sec_id);
                     outcome.repaint = true;
                     return;
@@ -2029,17 +2044,31 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
-                if let Some(entry_index) = self.hits.right_dock_file_rows.iter().find_map(|(rect, idx)| {
-                    super::contains(*rect, point).then_some(*idx)
-                }) {
+                if let Some(entry_index) = self
+                    .hits
+                    .right_dock_file_rows
+                    .iter()
+                    .find_map(|(rect, idx)| super::contains(*rect, point).then_some(*idx))
+                {
                     let now = std::time::Instant::now();
-                    let is_double_click = self.last_dock_file_click.as_ref().is_some_and(|(last_idx, last_time)| {
-                        *last_idx == entry_index && now.duration_since(*last_time) <= std::time::Duration::from_millis(350)
-                    });
+                    let is_double_click =
+                        self.last_dock_file_click
+                            .as_ref()
+                            .is_some_and(|(last_idx, last_time)| {
+                                *last_idx == entry_index
+                                    && now.duration_since(*last_time)
+                                        <= std::time::Duration::from_millis(350)
+                            });
                     self.last_dock_file_click = Some((entry_index, now));
 
                     self.right_dock_state.files_tab.selected_index = entry_index;
-                    if let Some(entry) = self.right_dock_state.files_tab.entries.get(entry_index).cloned() {
+                    if let Some(entry) = self
+                        .right_dock_state
+                        .files_tab
+                        .entries
+                        .get(entry_index)
+                        .cloned()
+                    {
                         if entry.is_dir {
                             self.right_dock_state.files_tab.toggle_expand(entry_index);
                         } else if is_double_click {

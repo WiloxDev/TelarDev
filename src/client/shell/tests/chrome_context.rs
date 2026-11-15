@@ -579,7 +579,10 @@ fn right_dock_bottom_toggle_collapses_and_expands_via_mouse() {
     let reexpanded_toggle = state.hits.right_dock_toggle;
     assert_eq!(reexpanded_toggle, toggle);
     let buf = reexpanded_frame.to_ratatui_buffer().expect("buffer");
-    assert_eq!(buf[(reexpanded_toggle.x, reexpanded_toggle.y)].symbol(), "»");
+    assert_eq!(
+        buf[(reexpanded_toggle.x, reexpanded_toggle.y)].symbol(),
+        "»"
+    );
 }
 
 #[test]
@@ -625,4 +628,3 @@ fn right_dock_header_toggle_collapses_and_expands_via_mouse() {
     assert!(outcome.resize);
     assert!(!state.right_dock_collapsed);
 }
-

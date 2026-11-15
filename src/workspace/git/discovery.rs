@@ -332,7 +332,11 @@ pub(super) fn git_repo_root_with_home(start: &Path, home: Option<&Path>) -> Opti
         start.parent()?.to_path_buf()
     };
 
-    let canonical_home = home.and_then(|h| std::fs::canonicalize(h).ok().or_else(|| Some(h.to_path_buf())));
+    let canonical_home = home.and_then(|h| {
+        std::fs::canonicalize(h)
+            .ok()
+            .or_else(|| Some(h.to_path_buf()))
+    });
 
     loop {
         let is_home = home.map_or(false, |h| current == h)

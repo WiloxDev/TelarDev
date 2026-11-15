@@ -19,15 +19,9 @@ pub enum GitFlowStep {
         behind: usize,
     },
     /// 06 STASH: Cambios locales pausados temporalmente en la pila.
-    Stash {
-        index: usize,
-        file_hint: String,
-    },
+    Stash { index: usize, file_hint: String },
     /// 07 TAG: Etiqueta inamovible anclada sobre un commit o rama específica.
-    Tag {
-        name: String,
-        target_ref: String,
-    },
+    Tag { name: String, target_ref: String },
     /// 04 REBASE: Re-aplicación de commits de la rama secundaria sobre la principal.
     Rebase {
         in_progress: bool,
@@ -37,10 +31,7 @@ pub enum GitFlowStep {
         has_conflict: bool,
     },
     /// 05 CHERRY-PICK: Copia de un commit específico insertándose en la rama actual.
-    CherryPick {
-        commit_hash: String,
-        note: String,
-    },
+    CherryPick { commit_hash: String, note: String },
     /// 03 MERGE: Fusión de la rama secundaria de vuelta a la principal con commit de unión.
     Merge {
         branch: String,
@@ -61,10 +52,7 @@ pub enum GitFlowStep {
         approved: bool,
     },
     /// 10 STACKED PRs: Pila secuencial de PRs divididos y encadenados.
-    StackedPrs {
-        prs: Vec<u32>,
-        current_pr: u32,
-    },
+    StackedPrs { prs: Vec<u32>, current_pr: u32 },
 }
 
 // Public helpers for inspecting step metadata during live background event ingestion.
@@ -105,8 +93,14 @@ impl GitFlowStep {
     /// Indica si el paso representa una operación en curso o requiere atención inmediata.
     pub fn is_active_or_alert(&self) -> bool {
         match self {
-            Self::Rebase { in_progress, has_conflict, .. } => *in_progress || *has_conflict,
-            Self::Merge { is_merge_commit, .. } => !*is_merge_commit,
+            Self::Rebase {
+                in_progress,
+                has_conflict,
+                ..
+            } => *in_progress || *has_conflict,
+            Self::Merge {
+                is_merge_commit, ..
+            } => !*is_merge_commit,
             Self::PullRequest { approved, .. } => !*approved,
             _ => false,
         }

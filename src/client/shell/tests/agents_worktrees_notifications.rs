@@ -1763,8 +1763,10 @@ fn workspace_display_label_disambiguates_duplicate_workspaces() {
     second_ws.focused = false;
     projected.workspaces.push(second_ws);
 
-    let label1 = super::sidebar::workspace_display_label(&projected, &projected.workspaces[0], false);
-    let label2 = super::sidebar::workspace_display_label(&projected, &projected.workspaces[1], false);
+    let label1 =
+        super::sidebar::workspace_display_label(&projected, &projected.workspaces[0], false);
+    let label2 =
+        super::sidebar::workspace_display_label(&projected, &projected.workspaces[1], false);
 
     assert_eq!(label1, "client-shell");
     assert_eq!(label2, "client-shell (2)");

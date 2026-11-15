@@ -31,7 +31,8 @@ mod alpha_tests {
             return;
         }
 
-        let temp_dir = std::env::temp_dir().join(format!("telar-alpha-test-{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("telar-alpha-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).unwrap();
 
@@ -47,7 +48,9 @@ mod alpha_tests {
         config.secret_key = Some("alpha-test-secret".to_string());
 
         // 1. Start proxy backend
-        let handle = adapter.start(&config).expect("failed to start proxy in alpha test");
+        let handle = adapter
+            .start(&config)
+            .expect("failed to start proxy in alpha test");
         assert_eq!(handle.endpoint.port(), port);
         assert_eq!(adapter.status(&handle), ProxyStatus::Healthy);
 
@@ -57,7 +60,10 @@ mod alpha_tests {
 
         let expected_proxy = format!("http://127.0.0.1:{port}");
         assert_eq!(cmd.get_env("HTTP_PROXY"), Some(OsStr::new(&expected_proxy)));
-        assert_eq!(cmd.get_env("HTTPS_PROXY"), Some(OsStr::new(&expected_proxy)));
+        assert_eq!(
+            cmd.get_env("HTTPS_PROXY"),
+            Some(OsStr::new(&expected_proxy))
+        );
         assert_eq!(
             cmd.get_env("OPENAI_BASE_URL"),
             Some(OsStr::new(&format!("{expected_proxy}/v1")))

@@ -110,8 +110,8 @@ impl CommunityProviderQuotaWidget {
     }
 
     pub fn update_from_json(&self, raw_json: &str) -> Result<(), WidgetError> {
-        let value: serde_json::Value = serde_json::from_str(raw_json)
-            .map_err(|e| WidgetError::InvalidJson(e.to_string()))?;
+        let value: serde_json::Value =
+            serde_json::from_str(raw_json).map_err(|e| WidgetError::InvalidJson(e.to_string()))?;
 
         let obj = value.as_object().ok_or_else(|| {
             WidgetError::InvalidJson("payload root must be an object".to_string())
