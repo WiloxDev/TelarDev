@@ -929,11 +929,11 @@ impl ClientShellState {
                             outcome.repaint = true;
                         }
                     }
-                    KeyCode::Char('q') | KeyCode::Char('Q') => {
-                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status {
-                            self.mode = ClientShellMode::Terminal;
-                            outcome.repaint = true;
-                        }
+                    KeyCode::Char('q') | KeyCode::Char('Q')
+                        if self.right_dock_state.active_tab == super::dock::DockTabId::Status =>
+                    {
+                        self.mode = ClientShellMode::Terminal;
+                        outcome.repaint = true;
                     }
                     _ => {}
                 }

@@ -14,25 +14,13 @@ pub struct ProviderStatusToken {
     pub color_hint: StatusColor,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct WidgetMetrics {
     pub proxy_active: bool,
     pub active_provider: Option<String>,
     pub active_model: Option<String>,
     pub tokens_used: Option<u64>,
     pub quota_remaining_percent: Option<f32>,
-}
-
-impl Default for WidgetMetrics {
-    fn default() -> Self {
-        Self {
-            proxy_active: false,
-            active_provider: None,
-            active_model: None,
-            tokens_used: None,
-            quota_remaining_percent: None,
-        }
-    }
 }
 
 pub trait WidgetProjectionPort: Send + Sync {

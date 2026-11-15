@@ -66,7 +66,7 @@ impl Default for GitSummary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EngramTelemetry {
     pub project_name: String,
     pub port: u16,
@@ -75,35 +75,12 @@ pub struct EngramTelemetry {
     pub cloud_status: String,
 }
 
-impl Default for EngramTelemetry {
-    fn default() -> Self {
-        Self {
-            project_name: String::new(),
-            port: 0,
-            is_online: false,
-            observations_count: 0,
-            cloud_status: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ToolStats {
     pub total_calls: usize,
     pub reads: usize,
     pub writes: usize,
     pub memory_ops: usize,
-}
-
-impl Default for ToolStats {
-    fn default() -> Self {
-        Self {
-            total_calls: 0,
-            reads: 0,
-            writes: 0,
-            memory_ops: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +141,7 @@ impl Default for SessionLiveStats {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct StatusSnapshot {
     pub todos: Vec<SessionTodoItem>,
     pub live_stats: SessionLiveStats,
@@ -178,25 +155,6 @@ pub struct StatusSnapshot {
     pub engram: EngramTelemetry,
     pub tools: ToolStats,
     pub mcp_servers: Vec<McpServerTelemetry>,
-}
-
-impl Default for StatusSnapshot {
-    fn default() -> Self {
-        Self {
-            model_name: String::new(),
-            active_account: String::new(),
-            project_days: 0,
-            context: ContextUsage::default(),
-            accounts: Vec::new(),
-            model_quotas: Vec::new(),
-            git: GitSummary::default(),
-            engram: EngramTelemetry::default(),
-            tools: ToolStats::default(),
-            todos: Vec::new(),
-            live_stats: SessionLiveStats::default(),
-            mcp_servers: Vec::new(),
-        }
-    }
 }
 
 /// Resuelve la ruta canónica al directorio `.git` (soportando worktrees y repos estándar).
@@ -535,10 +493,10 @@ pub fn read_git_remotes_info(root: &std::path::Path) -> (String, String) {
     (upstream, origin)
 }
 
+pub type GithubPrMetadata = (u32, String, (usize, usize), bool, Vec<u32>);
+
 /// Consulta de forma síncrona/ligera metadatos de GitHub PR si `gh` está disponible.
-pub fn try_query_github_pr(
-    root: &std::path::Path,
-) -> Option<(u32, String, (usize, usize), bool, Vec<u32>)> {
+pub fn try_query_github_pr(root: &std::path::Path) -> Option<GithubPrMetadata> {
     let output = std::process::Command::new("gh")
         .current_dir(root)
         .args([

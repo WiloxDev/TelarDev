@@ -75,10 +75,7 @@ pub fn provision_cpamc_html(proxy_dir: &Path) -> io::Result<PathBuf> {
 
     if !status.success() {
         let _ = fs::remove_file(&tmp);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "failed to download CPAMC management.html",
-        ));
+        return Err(io::Error::other("failed to download CPAMC management.html"));
     }
 
     if let Err(e) = crate::checksum::verify_sha256(&tmp, CPAMC_MANAGEMENT_HTML_SHA256) {
@@ -110,8 +107,7 @@ pub fn provision_cliproxyapi_binary(proxy_dir: &Path) -> io::Result<PathBuf> {
 
     if !status.success() {
         let _ = fs::remove_file(&tmp_archive);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "failed to download CLIProxyAPI release archive",
         ));
     }
@@ -135,8 +131,7 @@ pub fn provision_cliproxyapi_binary(proxy_dir: &Path) -> io::Result<PathBuf> {
     let _ = fs::remove_file(&tmp_archive);
 
     if !tar_status.success() || !target_bin.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "failed to extract CLIProxyAPI binary from archive",
         ));
     }

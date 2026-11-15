@@ -1857,7 +1857,7 @@ fn render_status_content(
             !is_col,
             header_style,
             tag_style,
-            hits.as_deref_mut(),
+            hits,
             Some(5),
         );
         cur_y += 1;
@@ -2151,7 +2151,7 @@ fn render_git_flow_content(
     buffer.set_string(
         x + 1,
         top_y,
-        &format!("TOP (Base {base_br})"),
+        format!("TOP (Base {base_br})"),
         Style::default().fg(config.palette.overlay0),
     );
     if actual_w > 8 {
@@ -2714,8 +2714,10 @@ mod tests {
 
     #[test]
     fn test_workspace_synchronization_invalidates_caches() {
-        let mut dock = RightDockState::default();
-        dock.quick_peek = Some(QuickPeekState::new("test.txt", vec!["hello".into()]));
+        let mut dock = RightDockState {
+            quick_peek: Some(QuickPeekState::new("test.txt", vec!["hello".into()])),
+            ..Default::default()
+        };
         assert!(dock.quick_peek.is_some());
 
         // Primera sincronización con workspace A

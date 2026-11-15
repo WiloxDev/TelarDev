@@ -142,7 +142,7 @@ impl ProxyLifecyclePort for CLIProxyAdapter {
             let mut guard = self
                 .active_child
                 .lock()
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned"))?;
+                .map_err(|_| io::Error::other("active_child mutex poisoned"))?;
             *guard = Some(child);
         }
 
@@ -153,15 +153,15 @@ impl ProxyLifecyclePort for CLIProxyAdapter {
 
         while start_time.elapsed() < timeout {
             {
-                let mut guard = self.active_child.lock().map_err(|_| {
-                    io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned")
-                })?;
+                let mut guard = self
+                    .active_child
+                    .lock()
+                    .map_err(|_| io::Error::other("active_child mutex poisoned"))?;
                 if let Some(child) = guard.as_mut() {
                     if let Ok(Some(exit_status)) = child.try_wait() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            format!("proxy child process exited early with status: {exit_status}"),
-                        ));
+                        return Err(io::Error::other(format!(
+                            "proxy child process exited early with status: {exit_status}"
+                        )));
                     }
                 }
             }
@@ -189,7 +189,7 @@ impl ProxyLifecyclePort for CLIProxyAdapter {
         let mut guard = self
             .active_child
             .lock()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "active_child mutex poisoned"))?;
+            .map_err(|_| io::Error::other("active_child mutex poisoned"))?;
 
         if let Some(mut child) = guard.take() {
             #[cfg(unix)]

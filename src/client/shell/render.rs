@@ -340,7 +340,7 @@ pub(super) fn render_shell(
         let target_ws_id = state
             .selected_workspace_id
             .map(|target| target.workspace_id.as_str())
-            .or_else(|| snapshot.focused_workspace_id.as_deref());
+            .or(snapshot.focused_workspace_id.as_deref());
         let is_preview = state
             .selected_workspace_id
             .map(|target| target.workspace_id.as_str())

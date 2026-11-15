@@ -339,16 +339,15 @@ pub(super) fn git_repo_root_with_home(start: &Path, home: Option<&Path>) -> Opti
     });
 
     loop {
-        let is_home = home.map_or(false, |h| current == h)
-            || canonical_home.as_ref().map_or(false, |h| &current == h);
+        let is_home =
+            home.is_some_and(|h| current == h) || (canonical_home.as_ref() == Some(&current));
 
-        if !is_home {
-            if git_dir_for_repo_root(&current)
+        if !is_home
+            && git_dir_for_repo_root(&current)
                 .map(|git_dir| git_dir.join("HEAD").is_file())
                 .unwrap_or(false)
-            {
-                return Some(current);
-            }
+        {
+            return Some(current);
         }
         if !current.pop() {
             return None;
