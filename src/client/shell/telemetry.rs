@@ -684,6 +684,139 @@ pub fn build_live_git_flow_snapshot(
     }
 }
 
+// ==============================================================================
+// Engram Telemetry & Zero-CPU Daemon Probe
+// ==============================================================================
+
+/// Consulta HTTP/1.0 ultra-ligera contra el daemon local de Engram (`127.0.0.1:<port>`)
+/// usando únicamente std::net::TcpStream con timeouts acotados (0% dependencias externas).
+pub fn query_engram_daemon(port: u16, path: &str) -> Option<serde_json::Value> {
+    use std::io::{Read, Write};
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream =
+        std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(80)).ok()?;
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(200)));
+    let _ = stream.set_write_timeout(Some(std::time::Duration::from_millis(100)));
+
+    let req = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1\r\nAccept: application/json\r\n\r\n");
+    stream.write_all(req.as_bytes()).ok()?;
+
+    let mut buf = Vec::new();
+    stream.take(64 * 1024).read_to_end(&mut buf).ok()?;
+    let text = String::from_utf8_lossy(&buf);
+    let (_head, body) = text.split_once("\r\n\r\n")?;
+    serde_json::from_str(body).ok()
+}
+
+/// Resuelve la ruta al archivo de base de datos de Engram (`engram.db`)
+pub fn resolve_engram_db_path() -> Option<std::path::PathBuf> {
+    // 1. Variable de entorno explícita
+    if let Ok(p) = std::env::var("ENGRAM_DB_PATH") {
+        let p_buf = std::path::PathBuf::from(p.trim());
+        if p_buf.is_file() {
+            return Some(p_buf);
+        }
+    }
+
+    // 2. Directorio ~/.engram/engram.db en USERPROFILE o HOME
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    if let Some(home_dir) = home {
+        let candidate = home_dir.join(".engram").join("engram.db");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 3. En Windows, revisar unidades de disco estándar para instalaciones portables
+    #[cfg(windows)]
+    {
+        for drive in ["C:\\", "D:\\"] {
+            let candidate = std::path::Path::new(drive)
+                .join(".engram")
+                .join("engram.db");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Inspecciona el encabezado SQLite de 100 bytes para verificar que sea una base válida
+/// y extraer el conteo de páginas de la base de datos sin requerir C o rusqlite.
+pub fn inspect_engram_db_header(db_path: &std::path::Path) -> Option<(u32, u64)> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(db_path).ok()?;
+    let mut header = [0u8; 100];
+    file.read_exact(&mut header).ok()?;
+
+    // Verificar firma SQLite 3: "SQLite format 3\0"
+    if &header[0..16] != b"SQLite format 3\0" {
+        return None;
+    }
+
+    let page_count = u32::from_be_bytes([header[28], header[29], header[30], header[31]]);
+    let mtime = db_path
+        .metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    Some((page_count, mtime))
+}
+
+/// Sincroniza la telemetría viva de Engram:
+/// - Sonda al daemon local (port 7437 o ENGRAM_PORT)
+/// - Si no responde, verifica presencia y firma del archivo local engram.db
+pub fn refresh_engram_telemetry(project_name: &str, current: &mut EngramTelemetry) {
+    let port: u16 = std::env::var("ENGRAM_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(7437);
+
+    current.project_name = project_name.to_string();
+
+    // 1. Sonda rápida al daemon local
+    if query_engram_daemon(port, "/health")
+        .and_then(|health| {
+            health
+                .get("status")
+                .and_then(|s| s.as_str())
+                .map(|s| s == "ok")
+        })
+        .unwrap_or(false)
+    {
+        current.is_online = true;
+        current.port = port;
+
+        if let Some(phase) =
+            query_engram_daemon(port, &format!("/sync/status?project={project_name}"))
+                .as_ref()
+                .and_then(|sync_val| sync_val.get("phase"))
+                .and_then(|s| s.as_str())
+        {
+            current.cloud_status = phase.to_string();
+        }
+        return;
+    }
+
+    // 2. Si el daemon HTTP no está respondiendo, verificar existencia física de la base de datos
+    if resolve_engram_db_path()
+        .and_then(|db_path| inspect_engram_db_header(&db_path))
+        .is_some()
+    {
+        current.is_online = true;
+        current.port = 0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -715,5 +848,45 @@ mod tests {
     fn test_clean_file_basename_trims_paths() {
         assert_eq!(clean_file_basename("src/client/shell/dock.rs"), "dock.rs");
         assert_eq!(clean_file_basename("report.md"), "report.md");
+    }
+
+    #[test]
+    fn test_query_engram_daemon_offline_graceful() {
+        // Un puerto no enlazado debe fallar de inmediato sin bloquear ni entrar en pánico
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let unused_port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let res = query_engram_daemon(unused_port, "/health");
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_inspect_engram_db_header_validation() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("telar-engram-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let fake_db = temp_dir.join("engram.db");
+
+        // 1. Archivo inválido (no SQLite)
+        std::fs::write(&fake_db, b"not a sqlite db").unwrap();
+        assert!(inspect_engram_db_header(&fake_db).is_none());
+
+        // 2. Archivo válido con encabezado SQLite 3
+        let mut header = vec![0u8; 100];
+        header[0..16].copy_from_slice(b"SQLite format 3\0");
+        // Page size = 4096 (0x1000)
+        header[16] = 0x10;
+        header[17] = 0x00;
+        // Page count = 42
+        header[28..32].copy_from_slice(&42u32.to_be_bytes());
+
+        std::fs::write(&fake_db, &header).unwrap();
+        let (pages, mtime) = inspect_engram_db_header(&fake_db).expect("valid sqlite header");
+        assert_eq!(pages, 42);
+        assert!(mtime > 0);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
