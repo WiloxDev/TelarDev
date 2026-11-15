@@ -30,10 +30,29 @@ impl CLIProxyAdapter {
         }
     }
 
-    pub fn default_paths() -> io::Result<Self> {
-        let home = std::env::var_os("HOME")
+    fn resolve_home_dir(
+        home: Option<std::ffi::OsString>,
+        userprofile: Option<std::ffi::OsString>,
+    ) -> io::Result<PathBuf> {
+        home.filter(|value| !value.is_empty())
+            .or_else(|| {
+                #[cfg(windows)]
+                {
+                    userprofile.filter(|value| !value.is_empty())
+                }
+                #[cfg(not(windows))]
+                {
+                    let _ = userprofile;
+                    None
+                }
+            })
             .map(PathBuf::from)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME directory not found"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME directory not found"))
+    }
+
+    pub fn default_paths() -> io::Result<Self> {
+        let home =
+            Self::resolve_home_dir(std::env::var_os("HOME"), std::env::var_os("USERPROFILE"))?;
 
         let work_dir = home.join(".local/share/telar/proxy");
         let binary_path = work_dir.join("cli-proxy-api");
@@ -305,5 +324,33 @@ mod tests {
         let a = adapter.unwrap();
         assert!(a.config_path.ends_with(".config/telar/proxy/config.yaml"));
         assert!(a.work_dir.ends_with(".local/share/telar/proxy"));
+    }
+
+    #[test]
+    fn test_resolve_home_dir_prefers_non_empty_home() {
+        let resolved = CLIProxyAdapter::resolve_home_dir(
+            Some(std::ffi::OsString::from("/tmp/telar-home")),
+            Some(std::ffi::OsString::from(r"C:\Users\fallback")),
+        )
+        .unwrap();
+        assert_eq!(resolved, PathBuf::from("/tmp/telar-home"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_resolve_home_dir_falls_back_to_userprofile_on_windows() {
+        let resolved = CLIProxyAdapter::resolve_home_dir(
+            None,
+            Some(std::ffi::OsString::from(r"C:\Users\runneradmin")),
+        )
+        .unwrap();
+        assert_eq!(resolved, PathBuf::from(r"C:\Users\runneradmin"));
+
+        let from_empty_home = CLIProxyAdapter::resolve_home_dir(
+            Some(std::ffi::OsString::new()),
+            Some(std::ffi::OsString::from(r"C:\Users\runneradmin")),
+        )
+        .unwrap();
+        assert_eq!(from_empty_home, PathBuf::from(r"C:\Users\runneradmin"));
     }
 }

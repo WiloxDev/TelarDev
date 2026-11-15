@@ -842,6 +842,30 @@
           "description": "Toggle sidebar collapse."
         },
         {
+          "key": "keys.toggle_right_dock",
+          "type": "keybinding",
+          "default": "\"prefix+i\"",
+          "description": "Toggle right dock collapse."
+        },
+        {
+          "key": "keys.jump_dock_status",
+          "type": "keybinding",
+          "default": "\"ctrl+alt+1\"",
+          "description": "Jump directly to the right dock Status tab."
+        },
+        {
+          "key": "keys.jump_dock_files",
+          "type": "keybinding",
+          "default": "\"ctrl+alt+2\"",
+          "description": "Jump directly to the right dock Files tab."
+        },
+        {
+          "key": "keys.jump_dock_changes",
+          "type": "keybinding",
+          "default": "\"ctrl+alt+3\"",
+          "description": "Jump directly to the right dock Changes tab."
+        },
+        {
           "key": "keys.indexed.tabs",
           "type": "string",
           "default": "unset",
@@ -896,6 +920,104 @@
           "description": "Collapsed sidebar presentation.",
           "values": [
             "compact",
+            "hidden"
+          ]
+        },
+        {
+          "key": "ui.right_dock_width",
+          "type": "integer",
+          "default": "44",
+          "description": "Default expanded right dock width in columns."
+        },
+        {
+          "key": "ui.right_dock_min_width",
+          "type": "integer",
+          "default": "24",
+          "description": "Minimum right dock width in columns when expanded."
+        },
+        {
+          "key": "ui.right_dock_max_width",
+          "type": "integer",
+          "default": "50",
+          "description": "Maximum right dock width in columns when expanded."
+        },
+        {
+          "key": "ui.right_dock_start_collapsed",
+          "type": "boolean",
+          "default": "false",
+          "description": "Start with the right dock collapsed."
+        },
+        {
+          "key": "ui.right_dock_enabled",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the right dock telemetry panel."
+        },
+        {
+          "key": "ui.right_dock_show_state",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the State section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_git",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Git section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_engram",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Engram telemetry section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_context",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Context & Tokens section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_cpamc",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the CPAMC section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_tools",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Tools section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_mcp",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the MCP servers section in the right dock."
+        },
+        {
+          "key": "ui.right_dock_show_git_flow",
+          "type": "boolean",
+          "default": "true",
+          "description": "Show the Git Flow live canvas in the right dock."
+        },
+        {
+          "key": "ui.cpamc_experience",
+          "type": "enum",
+          "default": "\"auto_switcher\"",
+          "description": "Selected experience for the CPAMC section in the right dock.",
+          "values": [
+            "auto_switcher",
+            "totopo27"
+          ]
+        },
+        {
+          "key": "ui.right_dock_collapsed_mode",
+          "type": "enum",
+          "default": "\"rail\"",
+          "description": "Collapsed right dock presentation.",
+          "values": [
+            "rail",
             "hidden"
           ]
         },
@@ -1061,6 +1183,18 @@
           ]
         },
         {
+          "key": "ui.network_icon",
+          "type": "string",
+          "default": "\"🖧\"",
+          "description": "Icon displayed for remote or network workspaces."
+        },
+        {
+          "key": "ui.network_shares",
+          "type": "list of strings",
+          "default": "[\"\\\\\\\\\", \"//\", \"/mnt/z\", \"/mnt/projects\", \"/mnt/share\", \"/media/\", \"Z:\", \"Y:\", \"X:\"]",
+          "description": "Path prefixes classified as remote or network shares."
+        },
+        {
           "key": "ui.sidebar.agents.row_gap",
           "type": "integer",
           "default": "0",
@@ -1095,6 +1229,12 @@
           "type": "color",
           "default": "\"cyan\"",
           "description": "Accent color for highlights, borders, and navigation UI. Accepts hex (#89b4fa), named colors (cyan, blue), or RGB (rgb(137,180,250))."
+        },
+        {
+          "key": "ui.font",
+          "type": "string",
+          "default": "unset",
+          "description": "Monospace font preference from the typography catalog (for example, `\"geist-mono\"` or `\"iosevka\"`)."
         }
       ]
     },
