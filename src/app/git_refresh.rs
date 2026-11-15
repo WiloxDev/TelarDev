@@ -571,7 +571,7 @@ mod tests {
         assert_eq!(workspace.cached_git_branch.as_deref(), Some("main"));
         assert_eq!(
             workspace.cached_auto_label,
-            repo.file_name().unwrap().to_string_lossy()
+            nested.file_name().unwrap().to_string_lossy()
         );
         assert!(workspace.cached_git_space.is_some());
         assert!(workspace.worktree_space.is_none());

@@ -114,15 +114,31 @@ fn spawn_client_process_with_args_and_env(
     args: &[&str],
     extra_env: &[(&str, &str)],
 ) -> SpawnedHerdr {
-    register_runtime_dir(runtime_dir);
-    let pair = native_pty_system()
-        .openpty(PtySize {
+    spawn_client_process_with_pty_size(
+        config_home,
+        runtime_dir,
+        api_socket_path,
+        args,
+        extra_env,
+        PtySize {
             rows: 24,
             cols: 80,
             pixel_width: 0,
             pixel_height: 0,
-        })
-        .unwrap();
+        },
+    )
+}
+
+fn spawn_client_process_with_pty_size(
+    config_home: &PathBuf,
+    runtime_dir: &PathBuf,
+    api_socket_path: &PathBuf,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+    pty_size: PtySize,
+) -> SpawnedHerdr {
+    register_runtime_dir(runtime_dir);
+    let pair = native_pty_system().openpty(pty_size).unwrap();
 
     let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_herdr"));
     support::isolate_herdr_test_process(&mut cmd);
@@ -1057,12 +1073,18 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
         bin.display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    let mut client = spawn_client_process_with_args_and_env(
+    let mut client = spawn_client_process_with_pty_size(
         &config_home,
         &runtime_dir,
         &api_socket,
         &["client"],
         &[("PATH", &path)],
+        PtySize {
+            rows: 24,
+            cols: 120,
+            pixel_width: 0,
+            pixel_height: 0,
+        },
     );
     let output = spawn_pty_drain(client._master.as_ref().unwrap().try_clone_reader().unwrap());
     let screen_text = || {
@@ -1071,7 +1093,7 @@ fn federated_client_starts_without_local_and_survives_its_restart() {
             .unwrap_or_else(|p| p.into_inner())
             .bytes
             .clone();
-        terminal_screen::text(&bytes, 80, 24)
+        terminal_screen::text(&bytes, 120, 24)
     };
     assert!(
         wait_until(REMOTE_READY_TIMEOUT, Duration::from_millis(20), || {
