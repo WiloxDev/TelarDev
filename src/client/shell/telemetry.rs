@@ -684,6 +684,331 @@ pub fn build_live_git_flow_snapshot(
     }
 }
 
+// ==============================================================================
+// CLIProxyAPI & CPAMC Quota & Account Discovery
+// ==============================================================================
+
+/// Normaliza cadenas de reset a un formato legible ("4h 59m" o "18h 30m UTC")
+pub fn format_reset_display(reset_str: &str) -> String {
+    let trimmed = reset_str.trim();
+    if trimmed.is_empty() {
+        return "...".to_string();
+    }
+    if trimmed.contains('h') || trimmed.contains('m') || trimmed.contains('d') {
+        return trimmed.to_string();
+    }
+    if let Some((_, time_part)) = trimmed.split_once('T') {
+        let clean_time = time_part.trim_end_matches('Z');
+        let parts: Vec<&str> = clean_time.split(':').collect();
+        if parts.len() >= 2 {
+            return format!("{}h {}m UTC", parts[0], parts[1]);
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Resuelve el directorio de credenciales / autenticaciones de CLIProxy o CPAMC
+pub fn resolve_auths_dir(root: &std::path::Path) -> Option<std::path::PathBuf> {
+    // 1. Variables de entorno explícitas
+    for env_key in ["CLIPROXY_AUTHS_DIR", "CPAMC_AUTHS_DIR"] {
+        if let Ok(dir) = std::env::var(env_key) {
+            let p = std::path::PathBuf::from(dir.trim());
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 2. Revisar configuración de proyecto local opencode.json si existe
+    for candidate in [
+        root.join("opencode.json"),
+        root.join(".opencode/opencode.json"),
+    ] {
+        let Ok(content) = std::fs::read_to_string(&candidate) else {
+            continue;
+        };
+        let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) else {
+            continue;
+        };
+        if let Some(auth_dir) = val
+            .get("cpamc_auths_dir")
+            .or_else(|| val.get("cliproxy_auths_dir"))
+            .and_then(|s| s.as_str())
+        {
+            let p = std::path::PathBuf::from(auth_dir.trim());
+            if p.is_dir() {
+                return Some(p);
+            }
+        }
+    }
+
+    // 3. Rutas estándar en USERPROFILE o HOME
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    if let Some(home_dir) = home {
+        for candidate in [
+            home_dir.join(".cliproxy").join("auths"),
+            home_dir.join(".cpamc").join("auths"),
+            home_dir.join("cliproxyapi").join("auths"),
+        ] {
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 4. En Windows, revisar unidades de disco estándar para instalaciones portables
+    #[cfg(windows)]
+    {
+        for drive in ["C:\\", "D:\\"] {
+            let candidate = std::path::Path::new(drive)
+                .join("cliproxyapi")
+                .join("auths");
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Descubre cuentas desde los archivos de credenciales JSON de CLIProxy / CPAMC.
+pub fn discover_cliproxy_accounts(auths_dir: &std::path::Path) -> Vec<AccountQuota> {
+    let mut accounts = Vec::new();
+    let Ok(entries) = std::fs::read_dir(auths_dir) else {
+        return accounts;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+
+        let Some(file_name) = path.file_name().and_then(|f| f.to_str()) else {
+            continue;
+        };
+
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+
+        let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            continue;
+        };
+
+        let raw_stem = file_name.strip_suffix(".json").unwrap_or(file_name);
+        let clean_stem = raw_stem
+            .strip_prefix("antigravity-")
+            .or_else(|| raw_stem.strip_prefix("google-"))
+            .or_else(|| raw_stem.strip_prefix("oauth-"))
+            .unwrap_or(raw_stem);
+
+        let prefix = val
+            .get("prefix")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                if !clean_stem.is_empty() {
+                    clean_stem.to_string()
+                } else if let Some(email) = val.get("email").and_then(|e| e.as_str()) {
+                    email.split('@').next().unwrap_or("acc").to_string()
+                } else {
+                    "acc".to_string()
+                }
+            });
+
+        accounts.push(AccountQuota {
+            name: prefix,
+            percent: 100,
+            is_leader: false,
+            role_symbol: "•",
+            quota_desc: "100% · activo".to_string(),
+        });
+    }
+
+    accounts.sort_by(|a, b| a.name.cmp(&b.name));
+    accounts
+}
+
+/// Resuelve la ruta al archivo de caché `quotas_cache.json`.
+pub fn resolve_quota_cache_path(
+    auths_dir: Option<&std::path::Path>,
+    root: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    // 1. Junto al auths_dir
+    if let Some(candidate) = auths_dir
+        .and_then(|dir| dir.parent())
+        .map(|parent| parent.join("quotas_cache.json"))
+        .filter(|candidate| candidate.is_file())
+    {
+        return Some(candidate);
+    }
+
+    // 2. En el directorio raíz del proyecto o subdirectorios comunes
+    for candidate in [
+        root.join("quotas_cache.json"),
+        root.join(".local/quotas_cache.json"),
+        root.join(".config/quotas_cache.json"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    // 3. En USERPROFILE o HOME ~/.cliproxy / ~/.config/cliproxy
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()
+        .map(std::path::PathBuf::from);
+
+    if let Some(home_dir) = home {
+        for candidate in [
+            home_dir.join(".cliproxy").join("quotas_cache.json"),
+            home_dir.join(".cpamc").join("quotas_cache.json"),
+            home_dir
+                .join(".config")
+                .join("cliproxy")
+                .join("quotas_cache.json"),
+            home_dir
+                .join(".config")
+                .join("hudr2")
+                .join("quotas_cache.json"),
+        ] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Hidrata cuentas y modelos a partir del contenido de `quotas_cache.json`.
+pub fn hydrate_cliproxy_quotas(
+    accounts: &mut [AccountQuota],
+    cache_path: &std::path::Path,
+) -> Vec<ModelQuota> {
+    let mut model_quotas = Vec::new();
+    let Ok(bytes) = std::fs::read(cache_path) else {
+        return model_quotas;
+    };
+    let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return model_quotas;
+    };
+
+    let Some(accs_obj) = val.get("accounts").and_then(|a| a.as_object()) else {
+        return model_quotas;
+    };
+
+    let mut seen_models = std::collections::BTreeSet::new();
+
+    for acc in accounts.iter_mut() {
+        let key = acc.name.to_lowercase();
+        let Some(rec) = accs_obj.get(&key) else {
+            continue;
+        };
+
+        if let Some(status) = rec.get("error_status").and_then(|s| s.as_u64()) {
+            if status == 429 {
+                acc.percent = 0;
+                acc.quota_desc = "429: Rate Limit".to_string();
+                continue;
+            } else if status == 401 || status == 403 {
+                acc.quota_desc = format!("{status}: Auth Error");
+                continue;
+            }
+        }
+
+        let Some(data) = rec.get("data") else {
+            continue;
+        };
+
+        let Some(groups) = data.get("groups").and_then(|g| g.as_array()) else {
+            continue;
+        };
+
+        let mut lowest_pct = 100u8;
+        let mut lowest_reset = "4h 59m".to_string();
+
+        for grp in groups {
+            let model_name = grp
+                .get("displayName")
+                .and_then(|d| d.as_str())
+                .unwrap_or("Modelo")
+                .to_string();
+
+            if let Some(buckets) = grp.get("buckets").and_then(|b| b.as_array()) {
+                for b in buckets {
+                    let window = b
+                        .get("window")
+                        .and_then(|w| w.as_str())
+                        .unwrap_or("5h")
+                        .to_string();
+                    let frac = b
+                        .get("remainingFraction")
+                        .and_then(|f| f.as_f64())
+                        .unwrap_or(1.0);
+                    let pct = (frac * 100.0).clamp(0.0, 100.0).round() as u8;
+                    let reset_raw = b.get("resetTime").and_then(|r| r.as_str()).unwrap_or("");
+                    let reset_str = format_reset_display(reset_raw);
+
+                    if pct < lowest_pct {
+                        lowest_pct = pct;
+                        lowest_reset = reset_str.clone();
+                    }
+
+                    let model_key = format!("{model_name}-{window}");
+                    if seen_models.insert(model_key) {
+                        model_quotas.push(ModelQuota {
+                            model_name: model_name.clone(),
+                            window_type: window,
+                            indicator: format!("{pct}%"),
+                            reset_in: reset_str,
+                        });
+                    }
+                }
+            }
+        }
+
+        acc.percent = lowest_pct;
+        acc.quota_desc = format!("{lowest_pct}% · reset {lowest_reset}");
+    }
+
+    model_quotas
+}
+
+/// Sincroniza en caliente la telemetría de CLIProxyAPI / CPAMC (cuentas y cuotas de modelos)
+/// sin realizar peticiones de red síncronas ni bloquear el bucle de render.
+pub fn refresh_cliproxy_telemetry(root: &std::path::Path) -> (Vec<AccountQuota>, Vec<ModelQuota>) {
+    let Some(auths_dir) = resolve_auths_dir(root) else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let mut accounts = discover_cliproxy_accounts(&auths_dir);
+    if accounts.is_empty() {
+        return (accounts, Vec::new());
+    }
+
+    // Asignar el primer registro como líder visual por defecto
+    if let Some(first) = accounts.first_mut() {
+        first.is_leader = true;
+        first.role_symbol = "⚡";
+    }
+
+    let model_quotas = if let Some(cache_path) = resolve_quota_cache_path(Some(&auths_dir), root) {
+        hydrate_cliproxy_quotas(&mut accounts, &cache_path)
+    } else {
+        Vec::new()
+    };
+
+    (accounts, model_quotas)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -715,5 +1040,85 @@ mod tests {
     fn test_clean_file_basename_trims_paths() {
         assert_eq!(clean_file_basename("src/client/shell/dock.rs"), "dock.rs");
         assert_eq!(clean_file_basename("report.md"), "report.md");
+    }
+
+    #[test]
+    fn test_format_reset_display() {
+        assert_eq!(format_reset_display("4h 59m"), "4h 59m");
+        assert_eq!(format_reset_display("2026-11-08T18:30:00Z"), "18h 30m UTC");
+        assert_eq!(format_reset_display(""), "...");
+    }
+
+    #[test]
+    fn test_discover_cliproxy_accounts_and_hydrate_quotas() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("telar-test-auths-{}", std::process::id()));
+        let auths_dir = temp_dir.join("auths");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        let _ = std::fs::create_dir_all(&auths_dir);
+
+        // Crear archivos de credenciales simulados
+        std::fs::write(
+            auths_dir.join("antigravity-can.json"),
+            r#"{"email": "can@example.com", "prefix": "can-claude"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            auths_dir.join("google-tavo.json"),
+            r#"{"email": "tavo@gmail.com"}"#,
+        )
+        .unwrap();
+
+        // 1. Descubrir cuentas
+        let mut accounts = discover_cliproxy_accounts(&auths_dir);
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].name, "can-claude");
+        assert_eq!(accounts[1].name, "tavo");
+
+        // 2. Crear caché de cuotas simulada
+        let cache_path = temp_dir.join("quotas_cache.json");
+        let cache_content = r#"{
+            "version": 1,
+            "accounts": {
+                "can-claude": {
+                    "fetched_at": 1731000000,
+                    "auth_mtime": 1730000000,
+                    "data": {
+                        "groups": [
+                            {
+                                "displayName": "Claude 3.7 Sonnet",
+                                "buckets": [
+                                    {
+                                        "window": "5h",
+                                        "remainingFraction": 0.75,
+                                        "resetTime": "2026-11-08T22:00:00Z"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                },
+                "tavo": {
+                    "fetched_at": 1731000000,
+                    "auth_mtime": 1730000000,
+                    "error_status": 429
+                }
+            }
+        }"#;
+        std::fs::write(&cache_path, cache_content).unwrap();
+
+        // 3. Hidratar cuotas desde caché
+        let model_quotas = hydrate_cliproxy_quotas(&mut accounts, &cache_path);
+
+        assert_eq!(accounts[0].percent, 75);
+        assert!(accounts[0].quota_desc.contains("75%"));
+        assert_eq!(accounts[1].percent, 0);
+        assert_eq!(accounts[1].quota_desc, "429: Rate Limit");
+
+        assert_eq!(model_quotas.len(), 1);
+        assert_eq!(model_quotas[0].model_name, "Claude 3.7 Sonnet");
+        assert_eq!(model_quotas[0].indicator, "75%");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
